@@ -50,9 +50,9 @@ jobs:
             SHA256 checksums:
             - pluk.sh: `${{ steps.checksum.outputs.sh_checksum }}`
             - pluk.ps1: `${{ steps.checksum.outputs.ps1_checksum }}`
-
-          files: |
+          artifacts: |
             pluk.sh
             pluk.sh.sha256
             pluk.ps1
             pluk.ps1.sha256
+          token: ${{ secrets.PERSONAL_TOKEN }}
