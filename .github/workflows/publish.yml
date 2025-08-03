@@ -3,7 +3,7 @@ name: Publish
 on:
   push:
     tags:
-      - "v*" # e.g. v0.1.0 triggers release
+      - "v*" # new version triggers release
 
 jobs:
   build-and-publish:
