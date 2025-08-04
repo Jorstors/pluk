@@ -1,29 +1,25 @@
-# Use a slim Python base
 FROM python:3.13-slim
 
-# Create app dir
+# 1. Set working directory
 WORKDIR /app
 
-# Install any OS-level deps (e.g. for Postgres/Redis clients or builds)
+# 2. Install only git (needed for gitpython) and clean up apt cache
 RUN apt-get update \
- && apt-get install -y --no-install-recommends build-essential git \
+ && apt-get install -y --no-install-recommends git \
  && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency spec and install
-COPY pyproject.toml ./
+# 3. Copy dependency manifests and install dependencies (no dev)
+COPY pyproject.toml poetry.lock ./
 RUN pip install --no-cache-dir poetry \
  && poetry config virtualenvs.create false \
- && poetry install --no-root --no-dev
+ && poetry install --no-root --without dev
 
-# Copy your application code
-# - the src/ directory containing pluk package
-# - CLI stubs and any scripts (e.g. pluk.sh, pluk.ps1) if you want them baked in
-COPY src/ ./src/
-COPY pluk.sh pluk.ps1 ./
+# 4. Copy application code
+COPY src/ ./src
 
-# Tell Docker which port the FastAPI server listens on
+# 5. Expose API port
 EXPOSE 8000
 
-# Default entrypoint: launch the Pluk server + worker
+# 6. Default entry: `pluk start`
 ENTRYPOINT ["pluk"]
 CMD ["start"]

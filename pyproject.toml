@@ -1,10 +1,14 @@
+# Development dependencies
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+
 [build-system]
 requires = ["setuptools>=65.5.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "pluk"
-version = "0.1.2.1"
+version = "0.1.1.2"
 description = "Symbol lookup / search engine CLI"
 readme = "README.md"
 requires-python = ">=3.13.5"
