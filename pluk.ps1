@@ -1,3 +1,4 @@
+#!/usr/bin/env pwsh
 # pluk.ps1 - Windows bootstrapper for Pluk
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -7,15 +8,35 @@ $workdir = "$env:USERPROFILE\.pluk"
 $composeFile = Join-Path $workdir "docker-compose.yml"
 $envFile = Join-Path $workdir ".env"
 
-Write-Host "=== Pluk bootstrap (Windows) ==="
+Write-Host "===== Pluk Bootstrap (Windows) =====" -ForegroundColor Cyan
 
-# Check Docker
+# Prereqs
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    Write-Error "Docker not found. Please install Docker Desktop: https://docs.docker.com/get-docker/"
+    Write-Error "Docker CLI not found. Install/start Docker Desktop and ensure it's running."
+    exit 1
+}
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Error "git not found. Install Git to proceed."
     exit 1
 }
 
-# Clone or update
+$oldErrPref = $ErrorActionPreference
+$ErrorActionPreference = 'SilentlyContinue'
+docker info 2>$null | Out-Null
+$ErrorActionPreference = $oldErrPref
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Docker daemon unreachable. Start Docker Desktop and try again."
+    exit 1
+}
+
+# Ensure Linux containers (images are Linux-based)
+$serverOs = (& docker version --format '{{.Server.Os}}' 2>$null).Trim().ToLower()
+if ($serverOs -and $serverOs -ne 'linux') {
+    Write-Error "Docker server is running on '$serverOs'. Switch to Linux containers."
+    exit 1
+}
+
+# Clone or update repo
 if (Test-Path $workdir) {
     Write-Host "[info] Updating Pluk at $workdir"
     git -C $workdir pull --ff-only | Out-Null
@@ -26,37 +47,18 @@ if (Test-Path $workdir) {
 
 Set-Location $workdir
 
-# Load .env if present
-if (Test-Path $envFile) {
-    Get-Content $envFile | ForEach-Object {
-        if ($_ -match '^\s*([^#=][^=]*)=(.*)$') {
-            $name = $matches[1].Trim()
-            $value = $matches[2].Trim()
-            [System.Environment]::SetEnvironmentVariable($name, $value)
-        }
-    }
-}
-
-# Create .env defaults if missing
+# Ensure .env exists with sane defaults
 if (-not (Test-Path $envFile)) {
     @"
 PLUK_DATABASE_URL=postgresql://pluk:plukpass@postgres:5432/pluk
 PLUK_REDIS_URL=redis://redis:6379/0
 "@ | Out-File -Encoding utf8 $envFile
     Write-Host "[info] Created default .env"
-    Get-Content $envFile | ForEach-Object {
-        if ($_ -match '^\s*([^#=][^=]*)=(.*)$') {
-            $name = $matches[1].Trim()
-            $value = $matches[2].Trim()
-            [System.Environment]::SetEnvironmentVariable($name, $value)
-        }
-    }
 }
 
 # Generate docker-compose.yml if missing
 if (-not (Test-Path $composeFile)) {
     @"
-version: '3.9'
 services:
   postgres:
     image: postgres:16-alpine
@@ -81,15 +83,16 @@ services:
       retries: 5
 
   pluk:
-    build: .
+    image: jorstors/pluk:latest
+    restart: unless-stopped
     depends_on:
       - postgres
       - redis
     environment:
-      PLUK_DATABASE_URL: \${PLUK_DATABASE_URL}
-      PLUK_REDIS_URL: \${PLUK_REDIS_URL}
+      PLUK_DATABASE_URL: '$${PLUK_DATABASE_URL}'
+      PLUK_REDIS_URL: '$${PLUK_REDIS_URL}'
     volumes:
-      - ./:/workspace
+      - ./:/app
     ports:
       - '8000:8000'
     command: ['pluk', 'start']
@@ -97,20 +100,34 @@ services:
 volumes:
   pluk_pgdata:
   pluk_redisdata:
+
 "@ | Out-File -Encoding utf8 $composeFile
     Write-Host "[info] Generated docker-compose.yml"
 }
 
-Write-Host "[info] Starting Docker Compose stack..."
+# Ensure docker compose is available
+$composeTest = & docker compose version 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "'docker compose' subcommand not available. Ensure Docker CLI v2 is installed."
+    exit 1
+}
+
+Write-Host "[info] Validating compose configuration..."
+docker compose config | Out-Null
+
+Write-Host "[info] Pulling images..."
+docker compose pull --quiet
+
+Write-Host "[info] Starting stack..."
 docker compose up --build -d
 
-Start-Sleep -Seconds 5
+Start-Sleep -Seconds 3
 
 Write-Host ""
-Write-Host " ✓ Pluk stack is running."
-Write-Host "Next steps:"
-Write-Host "  pluk init <path-to-your-git-repo>    # index a repository"
-Write-Host "  pluk search <symbol>                # start querying"
+Write-Host "===== Pluk stack is running! =====" -ForegroundColor Green
+Write-Host "Next steps:" -ForegroundColor Cyan
+Write-Host "  pluk init <path-to-your-git-repo>    # index a repository" -ForegroundColor Yellow
+Write-Host "  pluk search <symbol>                # start querying" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "You can also run inside container:"
-Write-Host "  docker compose exec pluk pluk --help"
+Write-Host "Inside container:" -ForegroundColor Magenta
+Write-Host "  docker compose exec pluk pluk --help" -ForegroundColor DarkGray

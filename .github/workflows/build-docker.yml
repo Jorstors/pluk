@@ -1,0 +1,22 @@
+name: Build & Publish “latest” Docker Image
+
+on:
+  push:
+    tags:
+      - "v*" # new version triggers build and publish
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        run: |
+          docker login -u jorstors -p "${{ secrets.DOCKER_PAT }}"
+
+      - name: Build & push latest
+        run: |
+          docker build -t jorstors/pluk:latest .
+          docker push jorstors/pluk:latest

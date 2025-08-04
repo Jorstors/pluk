@@ -1,62 +1,60 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="https://github.com/jorstors/pluk.git"
-WORKDIR="${HOME}/.pluk"
-COMPOSE_FILE="${WORKDIR}/docker-compose.yml"
-ENV_FILE="${WORKDIR}/.env"
+repo="https://github.com/jorstors/pluk.git"
+workdir="$HOME/.pluk"
+composeFile="$workdir/docker-compose.yml"
+envFile="$workdir/.env"
 
-echo "=== Pluk bootstrap (Unix) ==="
+echo "===== Pluk Bootstrap (Unix) ====="
 
-# Check for Docker
-if ! command -v docker >/dev/null; then
-  echo "ERROR: Docker not found. Please install Docker: https://docs.docker.com/get-docker/"
+# Prereqs
+if ! command -v docker >/dev/null 2>&1; then
+  echo "ERROR: Docker CLI not found. Install/start Docker and ensure the daemon is running." >&2
+  exit 1
+fi
+if ! command -v git >/dev/null 2>&1; then
+  echo "ERROR: git not found. Install git to proceed." >&2
   exit 1
 fi
 
-# Check for docker compose (v2+)
-if ! docker compose version >/dev/null 2>&1; then
-  echo "ERROR: 'docker compose' subcommand not available. Ensure Docker Compose v2+ is installed (modern Docker includes it)."
+# Suppress Docker errors, then check exit code
+if ! docker info >/dev/null 2>&1; then
+  echo "ERROR: Docker daemon unreachable. Start Docker and try again." >&2
   exit 1
 fi
 
-# Clone or update the Pluk code
-if [ -d "$WORKDIR" ]; then
-  echo "[info] Updating existing Pluk installation at $WORKDIR"
-  git -C "$WORKDIR" pull --ff-only || true
+# Ensure Linux containers (images are Linux-based)
+server_os=$(docker version --format '{{.Server.Os}}' 2>/dev/null || true)
+server_os=${server_os,,}
+if [[ -n "$server_os" && "$server_os" != "linux" ]]; then
+  echo "ERROR: Docker server is running on '$server_os'. Need Linux containers." >&2
+  exit 1
+fi
+
+# Clone or update repo
+if [[ -d "$workdir" ]]; then
+  echo "[info] Updating Pluk at $workdir"
+  git -C "$workdir" pull --ff-only >/dev/null
 else
-  echo "[info] Cloning Pluk into $WORKDIR"
-  git clone "$REPO" "$WORKDIR"
+  echo "[info] Cloning Pluk into $workdir"
+  git clone "$repo" "$workdir" >/dev/null
 fi
 
-cd "$WORKDIR"
+cd "$workdir"
 
-# Load .env if present
-if [ -f "$ENV_FILE" ]; then
-  # shellcheck disable=SC1091
-  set -o allexport
-  # shellcheck disable=SC1090
-  source "$ENV_FILE"
-  set +o allexport
-fi
-
-# Ensure .env exists with sane defaults
-if [ ! -f "$ENV_FILE" ]; then
-  cat <<EOF > "$ENV_FILE"
+# Ensure .env exists
+if [[ ! -f "$envFile" ]]; then
+  cat <<EOF > "$envFile"
 PLUK_DATABASE_URL=postgresql://pluk:plukpass@postgres:5432/pluk
 PLUK_REDIS_URL=redis://redis:6379/0
 EOF
-  echo "[info] Created default .env at $ENV_FILE"
-  set -o allexport
-  # shellcheck disable=SC1090
-  source "$ENV_FILE"
-  set +o allexport
+  echo "[info] Created default .env"
 fi
 
 # Generate docker-compose.yml if missing
-if [ ! -f "$COMPOSE_FILE" ]; then
-  cat <<'EOF' > "$COMPOSE_FILE"
-version: "3.9"
+if [[ ! -f "$composeFile" ]]; then
+  cat <<'EOF' > "$composeFile"
 services:
   postgres:
     image: postgres:16-alpine
@@ -68,7 +66,7 @@ services:
     volumes:
       - pluk_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pluk"]
+      test: ['CMD-SHELL', 'pg_isready -U pluk']
       interval: 5s
       retries: 5
 
@@ -76,42 +74,58 @@ services:
     image: redis:alpine
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli ping"]
+      test: ['CMD-SHELL', 'redis-cli ping']
       interval: 5s
       retries: 5
 
   pluk:
-    build: .
+    image: jorstors/pluk:latest
+    restart: unless-stopped
     depends_on:
       - postgres
       - redis
     environment:
-      PLUK_DATABASE_URL: \${PLUK_DATABASE_URL}
-      PLUK_REDIS_URL: \${PLUK_REDIS_URL}
+      PLUK_DATABASE_URL: '${PLUK_DATABASE_URL}'
+      PLUK_REDIS_URL: '${PLUK_REDIS_URL}'
     volumes:
-      - ./:/workspace
+      - ./:/app
     ports:
-      - "8000:8000"
-    command: ["pluk", "start"]
+      - '8000:8000'
+    command: ['pluk', 'start']
 
 volumes:
   pluk_pgdata:
   pluk_redisdata:
 EOF
-  echo "[info] Generated default docker-compose.yml"
+  echo "[info] Generated docker-compose.yml"
 fi
 
-echo "[info] Starting Pluk stack via Docker Compose..."
-docker compose up --build -d
+# Determine compose command
+if docker compose version >/dev/null 2>&1; then
+  dc_cmd="docker compose"
+elif command -v docker-compose >/dev/null 2>&1; then
+  dc_cmd="docker-compose"
+else
+  echo "ERROR: Neither 'docker compose' nor 'docker-compose' available." >&2
+  exit 1
+fi
 
-echo "[info] Waiting a few seconds for services to initialize..."
-sleep 5
+echo "[info] Validating compose configuration..."
+$dc_cmd config >/dev/null
 
-echo ""
-echo " ✓ Pluk stack is running."
+echo "[info] Pulling images..."
+$dc_cmd pull --quiet
+
+echo "[info] Starting stack..."
+$dc_cmd up --build -d
+
+sleep 3
+
+echo
+echo "===== Pluk stack is running! ====="
 echo "Next steps:"
 echo "  pluk init <path-to-your-git-repo>    # index a repository"
-echo "  pluk search <symbol>                # start querying"
-echo ""
-echo "If you want to run commands inside the container:"
-echo "  docker compose exec pluk pluk --help"
+echo "  pluk search <symbol>                 # start querying"
+echo
+echo "Inside container:"
+echo "  $dc_cmd exec pluk pluk --help"
