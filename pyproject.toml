@@ -23,4 +23,5 @@ package-dir = {"" = "src"}
 
 
 [project.scripts]
-pluk = "pluk.cli:main"
+pluk = "pluk.bootstrap:main"
+plukd = "pluk.cli:main"

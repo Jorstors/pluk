@@ -9,10 +9,10 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # 3. Copy dependency manifests and install dependencies (excluding dev dependencies)
-COPY pyproject.toml poetry.lock ./
+COPY pyproject.toml poetry.lock README.md ./
 RUN pip install --no-cache-dir poetry \
  && poetry config virtualenvs.create false \
- && poetry install --no-root --without dev
+ && poetry install --without dev
 
 # 4. Copy application code into the image
 COPY src/ ./src
@@ -20,6 +20,6 @@ COPY src/ ./src
 # 5. Expose the API port
 EXPOSE 8000
 
-# 6. Set the default entrypoint and command to run `pluk start`
-ENTRYPOINT ["pluk"]
+# 6. Set the default entrypoint and command to run `plukd start`
+ENTRYPOINT ["plukd"]
 CMD ["start"]
