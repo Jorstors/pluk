@@ -1,0 +1,24 @@
+name: Create Github Release
+
+on:
+  push:
+    tags:
+      - "v*" # new version triggers release
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history for the tag
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true # Automatically generate release notes
+
