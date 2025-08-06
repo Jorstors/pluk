@@ -51,14 +51,13 @@ def ensure_bootstrap():
       ["docker-compose", "-f", yml_path, "up", "-d"],
       check=True
     )
+    print("Pluk bootstrap complete! Docker stack is running.")
 
 def main():
   """Entry point for pluk bootstrap."""
 
-  print("pluk: bootstrap CLI")
   # 1) Bootstrap infra if needed
   ensure_bootstrap()
-  print("Docker Compose stack is ready. You can now run 'pluk start' to start the service.")
 
   # 2) Forward to plukd (container) CLI
   home = os.path.expanduser("~/.pluk/docker-compose.yml")
