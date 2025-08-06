@@ -11,7 +11,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pluk"
-version = "0.3.1"
+version = "0.3.2"
 description = "Symbol lookup / search engine CLI"
 readme = "README.md"
 requires-python = ">=3.13.5"
@@ -30,13 +30,13 @@ plukd = "pluk.cli:main"
 
 [tool.poetry]
 name = "pluk"
-version = "0.3.1"
+version = "0.3.2"
 description = "Symbol lookup / search engine CLI"
 authors = ["Justus Jones <Justus1274@gmail.com>"]
 packages = [{ include = "pluk", from = "src" }]
 
 [tool.bumpver]
-current_version = "0.3.1"
+current_version = "0.3.2"
 version_pattern = "MAJOR.MINOR.PATCH"
 commit_message = "bump version {old_version} -> {new_version}"
 tag_message = "{new_version}"
