@@ -1,66 +1,106 @@
-# PLUK
 
-**Pluk** is a minimal, backend-first symbol lookup and cross-reference engine CLI.
-Index git-tracked code, search symbols, see definitions/usages, and compute impact/blast-radius impact chains.
 
-## Quick install
+# Pluk
 
-### Unix / Linux / macOS (or Git Bash on Windows)
+Pluk is a git-commit–aware, backend-first symbol lookup and cross-reference engine with impact analysis. It helps developers explore and refactor large codebases by indexing symbol definitions and usages across one or more Git repositories.
 
-```bash
-curl -sSL https://cdn.jsdelivr.net/gh/Jorstors/pluk@v0.1.1/pluk.sh | bash
-```
+Designed for clarity, speed, and developer ergonomics, Pluk runs as a simple CLI tool on the host, while all heavy computation (indexing, querying, storage) runs in isolated Docker containers.
 
-### Windows (PowerShell)
 
-```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -Command "Invoke-Expression (Invoke-WebRequest https://cdn.jsdelivr.net/gh/Jorstors/pluk@v0.1.1/pluk.ps1).Content)"
-```
+## Features
 
-## Verify installer (optional)
+- Symbol search and definition lookup
+- Git commit–aware cross-reference indexing
+- Impact analysis of symbol usage across history
+- Fully containerized backend (Postgres + Redis)
+- Pip-installable host CLI
+- Single unified Python codebase for host shim and CLI core
 
-```bash
-curl -sSL https://github.com/Jorstors/pluk/releases/download/v0.1.1/pluk.sh.sha256 -o pluk.sh.sha256
-curl -sSL https://cdn.jsdelivr.net/gh/Jorstors/pluk@v0.1.1/pluk.sh -o pluk.sh
-sha256sum -c pluk.sh.sha256
-```
 
-## Basic usage
-
-After the bootstrapper has run (it brings up the service via Docker Compose):
+## Installation
 
 ```bash
-pluk start                  # run API + worker
-pluk init ./path/to/repo    # index a git repository
-pluk search <symbol>        # fuzzy lookup
-pluk define <symbol>        # show definition + references
-pluk impact <symbol>        # show downstream impact
-pluk diff --from A --to B   # compare commits
-pluk status                 # health & repo status
-pluk doctor                 # diagnostics
+pip install pluk
+````
+
+Ensure Docker and Docker Compose are installed and running on your machine.
+
+
+## Usage
+
+```bash
+# Initialize and index a repository
+pluk init ~/myrepo
+
+# Search for a symbol
+pluk search MyClass
+
+# Show where a symbol is defined
+pluk define my_function
+
+# Show usage/impact of a symbol
+pluk impact my_function
+
+# Show changes to a symbol across commits
+pluk diff abc123 def456 --symbol SomeClass
 ```
+
+All commands are executed from the host. Pluk automatically starts the necessary backend services in Docker under the hood.
+
+---
+# Data Flow
+
+[![](https://mermaid.ink/img/pako\:eNp9Uu9L40AQ_VeGAcXjYonNtk2CCJp-uIJ3FPGTRmTNbpOlzW7YbNC7tv_7zaY_oAp-yryZeW_mzWaNhRESU1yszHtRcevg_iHXAG33VlreVPDLtM4noI-y-9lzjs2qW8JFRRjaStU_cnzxLVKLXJ-Qp6ZYSvv6R7p3Y5c7GaGsLJwyGh7vdpk5yWVGO660tHt5ARc0C37C7Xx20KdOGlla2VLTIYTp3bH8IIXytf4LGS8q-Xm1s7PeByjtpOX9Hq3P783B9eXlDWzAh4Wpa65FC-dgOtd0bnO66VFw5rU0XxFjX_oif0I8DHnM5pCOWDTcHI193zuOJslm5zLXGGBplcDU2U4GWEtbcw9x7UVydJWsyX5KoeB0fMz1ljgN10_G1AeaNV1ZYbrgq5ZQ1wju5FRxer76mLV0PWkz02mHacJGvQima_zwcBAlwzEbJuEwikZRFOBfTAkNJqNJOGHhOGZJzLYB_uunhoM4TMIrqrAwYTGLxwGSH2fs792PSDdcqBK3_wFCz9YC?type=png)](https://mermaid.live/edit#pako:eNp9Uu9L40AQ_VeGAcXjYonNtk2CCJp-uIJ3FPGTRmTNbpOlzW7YbNC7tv_7zaY_oAp-yryZeW_mzWaNhRESU1yszHtRcevg_iHXAG33VlreVPDLtM4noI-y-9lzjs2qW8JFRRjaStU_cnzxLVKLXJ-Qp6ZYSvv6R7p3Y5c7GaGsLJwyGh7vdpk5yWVGO660tHt5ARc0C37C7Xx20KdOGlla2VLTIYTp3bH8IIXytf4LGS8q-Xm1s7PeByjtpOX9Hq3P783B9eXlDWzAh4Wpa65FC-dgOtd0bnO66VFw5rU0XxFjX_oif0I8DHnM5pCOWDTcHI193zuOJslm5zLXGGBplcDU2U4GWEtbcw9x7UVydJWsyX5KoeB0fMz1ljgN10_G1AeaNV1ZYbrgq5ZQ1wju5FRxer76mLV0PWkz02mHacJGvQima_zwcBAlwzEbJuEwikZRFOBfTAkNJqNJOGHhOGZJzLYB_uunhoM4TMIrqrAwYTGLxwGSH2fs792PSDdcqBK3_wFCz9YC)
+
+Pluk uses the host shim (`pluk`) to forward commands into a running container where the core CLI (`plukd`) executes. The `plukd` CLI interacts with Postgres and Redis over Docker’s internal network. Output is streamed back to the host terminal.
+
+---
+
+# Architecture
+
+* `pluk` (host shim): Ensures the container stack is up and forwards CLI calls via `docker compose exec`.
+* `plukd` (real CLI): Executes commands inside the container using the indexed symbol graph.
+* `Postgres`: Stores the symbol graph, commits, and metadata.
+* `Redis`: Caches results of expensive queries like impact analysis.
+
 
 ## Development
 
-Editable/development install and test:
+Project structure:
 
-```bash
-python -m pip install --upgrade build
-python -m build
-pip install -e .
-pytest
+```
+src/pluk/
+├── bootstrap.py     # Host shim
+├── cli.py           # Container CLI logic
 ```
 
-## Releases
+Entry points (in pyproject.toml):
 
-Tagging a semantic version like `v0.1.1` triggers the release workflow, publishing `pluk.sh`, `pluk.ps1`, and their checksums. Users can install a specific version via the jsDelivr URLs above.
+```toml
+[project.scripts]
+pluk = "pluk.bootstrap:main"
+plukd = "pluk.cli:main"
+```
 
-## Requirements
+Build and run:
 
-- Docker with `docker compose` (v2+)
-- Git (for target repositories)
-- Python (for development/testing, optional for users using embedded CLI)
+```bash
+pip install -e .
+pluk init .
+```
+
+
+## Tests
+
+* Unit tests for CLI and shim logic
+* Integration test: `pluk init` on toy repo
+* Requires Docker daemon running locally
+
+
+
 
 ## License
 
-## MIT © Justus Jones
+MIT License
+
+```
