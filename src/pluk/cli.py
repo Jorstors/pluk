@@ -4,12 +4,19 @@ import argparse
 import sys
 
 def cmd_init(args):
+    print(f"Initializing repository at {args.path}")
     return
 
 def cmd_search(args):
+    print(f"Searching for symbol: {args.symbol}")
     return
 
 def cmd_start(args):
+    print(f"Starting API server + worker")
+    return
+
+def cmd_cleanup(args):
+    print(f"Cleaning up compose stack -- removing active containers")
     return
 
 def build_parser():
@@ -26,6 +33,9 @@ def build_parser():
 
     p_start = sub.add_parser("start", help="Start API server + worker")
     p_start.set_defaults(func=cmd_start)
+
+    p_cleanup = sub.add_parser("cleanup", help="Cleanup compose stack -- remove active containers")
+    p_cleanup.set_defaults(func=cmd_cleanup)
 
     return p
 

@@ -2,6 +2,9 @@
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
 
+# Production dependencies
+[tool.poetry.dependencies]
+
 [build-system]
 requires = ["setuptools>=65.5.0", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -21,7 +24,13 @@ keywords = ["symbol","search","cli","index","lookup"]
 [tool.setuptools]
 package-dir = {"" = "src"}
 
-
 [project.scripts]
 pluk = "pluk.bootstrap:main"
 plukd = "pluk.cli:main"
+
+[tool.poetry]
+name = "pluk"
+version = "0.3.1"
+description = "Symbol lookup / search engine CLI"
+authors = ["Justus Jones <Justus1274@gmail.com>"]
+packages = [{ include = "pluk", from = "src" }]
