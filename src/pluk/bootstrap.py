@@ -1,7 +1,6 @@
 import os, subprocess, sys, textwrap
 
 COMPOSE_YML = textwrap.dedent("""
-version: '3.8'
 services:
   postgres:
     image: postgres:16-alpine
@@ -56,14 +55,29 @@ def ensure_bootstrap():
 def main():
   """Entry point for pluk bootstrap."""
 
-  # 1) Bootstrap infra if needed
+  # Bootstrap infra if needed
   ensure_bootstrap()
 
-  # 2) Forward to plukd (container) CLI
+  # Forward to plukd (container) CLI
   home = os.path.expanduser("~/.pluk/docker-compose.yml")
   cmd = [
     "docker-compose", "-f", home, "exec", "pluk", "plukd"
   ] + sys.argv[1:]
+
+  # Execute the command and capture output
+
+  try:
+    result = subprocess.run(cmd, check=True, text=True, capture_output=True)
+    print(result.stdout)
+    if result.stderr:
+      print(result.stderr, file=sys.stderr)
+  except subprocess.CalledProcessError as e:
+    print(f"Error: {e}", file=sys.stderr)
+    if e.stdout:
+      print(e.stdout)
+    if e.stderr:
+      print(e.stderr, file=sys.stderr)
+    sys.exit(e.returncode)
 
 if __name__ == "__main__":
   main()
