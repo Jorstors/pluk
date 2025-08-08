@@ -39,6 +39,12 @@ volumes:
 """)
 
 def ensure_bootstrap():
+  """
+  Ensure the Docker Compose stack is set up for Pluk.
+
+  This function checks if the necessary Docker Compose file exists,
+  creates it if not, and brings up the Docker stack if needed.
+  """
   home = os.path.expanduser("~/.pluk")
   os.makedirs(home, exist_ok=True)
   yml_path = os.path.join(home, "docker-compose.yml")
@@ -64,7 +70,9 @@ def ensure_bootstrap():
     capture_output=True,
     text=True
   )
+
   running = "pluk" in res.stdout
+
   if created or not running:
     print("Bringing up Docker stack...")
     subprocess.run(
@@ -109,6 +117,7 @@ def main():
     if process.returncode != 0:
       print(f"Command failed with exit code {process.returncode}", file=sys.stderr)
       sys.exit(process.returncode)
+
   except Exception as e:
     print(f"Error executing command: {e}", file=sys.stderr)
     sys.exit(1)
