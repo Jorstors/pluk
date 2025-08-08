@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+import subprocess
 
 def cmd_init(args):
     print(f"Initializing repository at {args.path}")
@@ -17,6 +18,7 @@ def cmd_start(args):
 
 def cmd_cleanup(args):
     print(f"Cleaning up compose stack -- removing active containers")
+    subprocess.run(["docker", "compose", "down"], check=True)
     return
 
 def build_parser():

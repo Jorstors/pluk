@@ -12,13 +12,13 @@ RUN apt-get update \
 # Copy only dependency files first for better cache usage
 COPY pyproject.toml README.md ./
 
-# Install build dependencies (if needed)
+# Install build dependencies
 RUN pip install --upgrade pip setuptools wheel
 
 # Copy source code
 COPY src/ ./src
 
-# Install the application package
+# Install the application package binaries
 RUN pip install .
 
 # Expose the API port
