@@ -74,14 +74,14 @@ def ensure_bootstrap():
   running = "pluk" in res.stdout
 
   if created or not running:
-    print("Bringing up Docker stack...")
+    print("Starting Pluk services...")
     subprocess.run(
       ["docker", "compose", "-f", yml_path, "up", "-d"],
       check=True,
-      capture_output=True
     )
+    print("Pluk services are running.")
   if created:
-    print("Pluk bootstrap complete! Docker stack is running.")
+    print("Pluk bootstrap complete! Pluk services are running.")
 
 def main():
   """Entry point for pluk bootstrap."""

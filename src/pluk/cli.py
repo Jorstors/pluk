@@ -136,7 +136,7 @@ def build_parser():
     p_start.set_defaults(func=cmd_start)
 
     # Cleanup command to stop the Docker Compose stack
-    p_cleanup = sub.add_parser("cleanup", help="Cleanup compose stack -- remove active containers")
+    p_cleanup = sub.add_parser("cleanup", help="Stop Pluk services")
     p_cleanup.set_defaults(func=cmd_cleanup)
 
     return p
