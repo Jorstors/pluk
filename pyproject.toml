@@ -1,26 +1,41 @@
-# Development dependencies
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.0"
-
 [build-system]
 requires = ["setuptools>=65.5.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "pluk"
-version = "0.3.0"
+version = "0.3.2"
 description = "Symbol lookup / search engine CLI"
 readme = "README.md"
 requires-python = ">=3.13.5"
-license = { text = "MIT" }
+license = "MIT"
 authors = [
   { name = "Justus Jones", email = "Justus1274@gmail.com" }
 ]
 keywords = ["symbol","search","cli","index","lookup"]
 
+[project.scripts]
+pluk = "pluk.bootstrap:main"
+plukd = "pluk.cli:main"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 
+[tool.bumpver]
+current_version = "0.3.2"
+version_pattern = "MAJOR.MINOR.PATCH"
+commit_message = "bump version {old_version} -> {new_version}"
+tag_message = "{new_version}"
+tag_scope = "default"
+pre_commit_hook = ""
+post_commit_hook = ""
+commit = true
+tag = true
+push = true
 
-[project.scripts]
-pluk = "pluk.cli:main"
+[tool.bumpver.file_patterns]
+"pyproject.toml" = [
+    'current_version = "{version}"',
+    'version = "{version}"'
+]
+

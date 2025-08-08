@@ -1,25 +1,29 @@
+
 FROM python:3.13-slim
 
-# 1. Set working directory
+# Set working directory
 WORKDIR /app
 
-# 2. Install only git (required for gitpython) and clean up apt cache
+# Install git (required for gitpython) and clean up
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git \
- && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
 
-# 3. Copy dependency manifests and install dependencies (excluding dev dependencies)
-COPY pyproject.toml poetry.lock ./
-RUN pip install --no-cache-dir poetry \
- && poetry config virtualenvs.create false \
- && poetry install --no-root --without dev
+# Copy only dependency files first for better cache usage
+COPY pyproject.toml README.md ./
 
-# 4. Copy application code into the image
+# Install build dependencies
+RUN pip install --upgrade pip setuptools wheel
+
+# Copy source code
 COPY src/ ./src
 
-# 5. Expose the API port
+# Install the application package binaries
+RUN pip install .
+
+# Expose the API port
 EXPOSE 8000
 
-# 6. Set the default entrypoint and command to run `pluk start`
-ENTRYPOINT ["pluk"]
+# Set the default entrypoint and command to run `plukd start`
+ENTRYPOINT ["plukd"]
 CMD ["start"]
