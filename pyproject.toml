@@ -15,7 +15,7 @@ authors = [
 keywords = ["symbol","search","cli","index","lookup"]
 
 [project.scripts]
-pluk = "pluk.bootstrap:main"
+pluk = "pluk.shim:main"
 plukd = "pluk.cli:main"
 
 [tool.setuptools]

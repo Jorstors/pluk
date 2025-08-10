@@ -1,4 +1,4 @@
-# src/pluk/bootstrap.py
+# src/pluk/shim.py
 import os, subprocess, sys, textwrap
 
 COMPOSE_YML = textwrap.dedent("""
@@ -131,13 +131,33 @@ def start_pluk_services(home, yml_path):
         f.truncate()
         created = True
 
-  # Bring up the stack if it was created or updated
+  # Bring up the stack
   print("Starting Pluk services...")
-  subprocess.run(
-    ["docker", "compose", "-f", yml_path, "up", "-d"],
-    check=True,
-  )
-  print("Pluk services are now running.")
+  try:
+    subprocess.run(
+      ["docker", "compose", "-f", yml_path, "up", "-d"],
+      check=True,
+    )
+    print("Pluk services are now running.")
+  except subprocess.CalledProcessError as e:
+    print("Error starting Pluk services:", e.stderr, file=sys.stderr)
+    return False
+
+
+def end_pluk_services(home, yml_path):
+    """
+    Stop the Docker Compose stack. Does not remove containers.
+
+    This command is used to stop the Pluk services without removing them.
+    It can be useful for maintenance or updates.
+    """
+    try:
+      print(f"Stopping Pluk services...")
+      subprocess.run(["docker", "compose", "-f", yml_path, "stop"], check=True, capture_output=True)
+      print("Pluk services stopped.")
+    except subprocess.CalledProcessError as e:
+      print("Error stopping Pluk services:", e.stderr, file=sys.stderr)
+      return False
 
 def main():
   """
@@ -153,13 +173,21 @@ def main():
   yml_path = os.path.join(home, "docker-compose.yml")
   is_running = ensure_running(home, yml_path)
 
+  # Handle the start command separately
   if len(sys.argv) > 1 and sys.argv[1] == "start":
     if is_running:
       print("Pluk services are already running.")
       return
 
-    print("Starting Pluk services...")
     start_pluk_services(home, yml_path)
+    return
+
+  # Handle the cleanup command
+  if len(sys.argv) > 1 and sys.argv[1] == "cleanup":
+    if not is_running:
+      print("Pluk services are not running. Nothing to clean up.")
+      return
+    end_pluk_services(home, yml_path)
     return
 
   # Ensure the Pluk services are running
