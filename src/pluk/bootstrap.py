@@ -12,43 +12,111 @@ services:
       POSTGRES_DB: pluk
     volumes:
       - pluk_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pluk -d pluk -h localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   redis:
     image: redis:alpine
     restart: unless-stopped
     volumes:
       - pluk_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
-  pluk:
+  api:
     image: jorstors/pluk:latest
     restart: unless-stopped
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       PLUK_DATABASE_URL: postgresql://pluk:plukpass@postgres:5432/pluk
       PLUK_REDIS_URL: redis://redis:6379/0
-    ports:
-      - "8000:8000"
-    entrypoint: ["plukd"]
-    command: ["start"]
+    expose:
+      - "8000"
+    command: ["uvicorn", "pluk.api:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  worker:
+    image: jorstors/pluk:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    environment:
+      PLUK_DATABASE_URL: postgresql://pluk:plukpass@postgres:5432/pluk
+      PLUK_REDIS_URL: redis://redis:6379/0
+      PLUK_REPOS_DIR: /var/pluk/repos
+    volumes:
+      - pluk_repos:/var/pluk/repos
+    command: ["celery", "-A", "pluk.worker", "worker", "-l", "info"]
+
+  cli:
+    image: jorstors/pluk:latest
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      PLUK_API_URL: http://api:8000
+    command: ["sleep", "infinity"]
 
 volumes:
   pluk_pgdata:
   pluk_redisdata:
+  pluk_repos:
+
 """)
 
-def ensure_bootstrap():
+def ensure_running(home, yml_path):
+  """
+  Ensure that the Pluk services are running.
+
+  This functions checks if the necessary Docker containers are up and running.
+  If they are not running, it will return False.
+  """
+  os.makedirs(home, exist_ok=True)
+
+  try:
+    # Check if the expected services are running
+    res = subprocess.run(
+      ["docker", "compose", "-f", yml_path, "ps", "--status=running"],
+      check=True,
+      capture_output=True,
+      text=True
+    )
+  except subprocess.CalledProcessError as e:
+    print("Error checking Docker Compose status:", e.stderr, file=sys.stderr)
+    return False
+
+  is_running = all(service in res.stdout for service in ["postgres", "redis", "cli", "api", "worker"])
+
+  return is_running
+
+def start_pluk_services(home, yml_path):
   """
   Ensure the Docker Compose stack is set up for Pluk.
 
   This function checks if the necessary Docker Compose file exists,
   creates it if not, and brings up the Docker stack if needed.
   """
-  home = os.path.expanduser("~/.pluk")
+
+  # Ensure the home directory exists
   os.makedirs(home, exist_ok=True)
-  yml_path = os.path.join(home, "docker-compose.yml")
+
   created = False
+  # Create or update the Docker Compose file
   if not os.path.exists(yml_path):
     with open(yml_path, "w") as f:
       f.write(COMPOSE_YML)
@@ -63,36 +131,47 @@ def ensure_bootstrap():
         f.truncate()
         created = True
 
-  # bring up the stack if it was created or updated
-  res = subprocess.run(
-    ["docker", "compose", "-f", yml_path, "ps", "--status=running"],
+  # Bring up the stack if it was created or updated
+  print("Starting Pluk services...")
+  subprocess.run(
+    ["docker", "compose", "-f", yml_path, "up", "-d"],
     check=True,
-    capture_output=True,
-    text=True
   )
-
-  running = "pluk" in res.stdout
-
-  if created or not running:
-    print("Starting Pluk services...")
-    subprocess.run(
-      ["docker", "compose", "-f", yml_path, "up", "-d"],
-      check=True,
-    )
-    print("Pluk services are running.")
-  if created:
-    print("Pluk bootstrap complete! Pluk services are running.")
+  print("Pluk services are now running.")
 
 def main():
-  """Entry point for pluk bootstrap."""
+  """
+  Entry point for pluk shim.
 
-  # Bootstrap infra if needed
-  ensure_bootstrap()
+  This function only handles the start command and forwards other commands
+  to the plukd CLI running inside the Docker container.
 
-  # Forward to plukd (container) CLI
-  home = os.path.expanduser("~/.pluk/docker-compose.yml")
+  It ensures that the Pluk services are running before executing any commands.
+  """
+
+  home = os.path.expanduser("~/.pluk")
+  yml_path = os.path.join(home, "docker-compose.yml")
+  is_running = ensure_running(home, yml_path)
+
+  if len(sys.argv) > 1 and sys.argv[1] == "start":
+    if is_running:
+      print("Pluk services are already running.")
+      return
+
+    print("Starting Pluk services...")
+    start_pluk_services(home, yml_path)
+    return
+
+  # Ensure the Pluk services are running
+  if not is_running:
+    print("Pluk services are not running. Please start them with:")
+    print('   "pluk start"')
+    return
+
+  # === Forward commands to plukd (container) CLI ===
+
   cmd = [
-    "docker-compose", "-f", home, "exec", "pluk", "plukd"
+    "docker", "compose", "-f", yml_path, "exec", "cli", "plukd"
   ] + sys.argv[1:]
 
   # Execute the command and capture output
@@ -118,9 +197,9 @@ def main():
       print(f"Command failed with exit code {process.returncode}", file=sys.stderr)
       sys.exit(process.returncode)
 
-  except Exception as e:
+  except subprocess.CalledProcessError as e:
     print(f"Error executing command: {e}", file=sys.stderr)
-    sys.exit(1)
+    return False
 
 if __name__ == "__main__":
   main()
