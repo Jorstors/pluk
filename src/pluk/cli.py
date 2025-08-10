@@ -59,25 +59,13 @@ def cmd_diff(args):
     print(f"Showing differences for symbol: {args.symbol}")
     return
 
-def cmd_cleanup(args):
-    """
-    Stop the Docker Compose stack. Does not remove containers.
-
-    This command is used to stop the Pluk services without removing them.
-    It can be useful for maintenance or updates.
-    """
-    print(f"Stopping Docker Compose stack...")
-    subprocess.run(["docker", "compose", "stop"], check=True, capture_output=True)
-    print("Docker Compose stack stopped.")
-    return
-
 def build_parser():
     """
     Build the command line argument parser for Pluk CLI.
 
     This function sets up the argument parser with subcommands
     for initializing repositories, searching symbols, defining symbols,
-    analyzing impacts, showing diffs,  and cleaning up.
+    analyzing impacts, and showing diffs.
     """
 
     # Create the main argument parser
@@ -110,10 +98,6 @@ def build_parser():
     p_diff = sub.add_parser("diff", help="Show differences for a symbol")
     p_diff.add_argument("symbol", help="Symbol name")
     p_diff.set_defaults(func=cmd_diff)
-
-    # Cleanup command to stop the Docker Compose stack
-    p_cleanup = sub.add_parser("cleanup", help="Stop Pluk services")
-    p_cleanup.set_defaults(func=cmd_cleanup)
 
     return p
 
