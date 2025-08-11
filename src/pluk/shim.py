@@ -86,12 +86,13 @@ def ensure_running(home, yml_path):
   This functions checks if the necessary Docker containers are up and running.
   If they are not running, it will return False.
   """
+  import json
   os.makedirs(home, exist_ok=True)
 
   try:
     # Check if the expected services are running
     res = subprocess.run(
-      ["docker", "compose", "-f", yml_path, "ps", "--status=running"],
+      ["docker", "compose", "-f", yml_path, "ps", "--status=running", "--format", "json"],
       check=True,
       capture_output=True,
       text=True
@@ -100,9 +101,27 @@ def ensure_running(home, yml_path):
     print("Error checking Docker Compose status:", e.stderr, file=sys.stderr)
     return False
 
-  is_running = all(service in res.stdout for service in ["postgres", "redis", "cli", "api", "worker"])
+  required_services = {"postgres", "redis", "api", "worker", "cli"}
+  found_services = set()
 
-  return is_running
+  lines = res.stdout.splitlines()
+
+  # Parse line by line json output
+  for line in lines:
+    try:
+      res_object = json.loads(line)
+      if res_object["Service"] in required_services:
+        found_services.add(res_object["Service"])
+    except (json.JSONDecodeError, KeyError) as e:
+      print(f"Warning: Error parsing service info: {e}", file=sys.stderr)
+      continue
+
+  # Check if all required services are found
+  if found_services != required_services:
+    return False
+
+  return True
+
 
 def start_pluk_services(home, yml_path):
   """
@@ -131,9 +150,17 @@ def start_pluk_services(home, yml_path):
         f.truncate()
         created = True
 
-  # Bring up the stack
-  print("Starting Pluk services...")
   try:
+    # Always pull the latest images before starting
+    print("Pulling latest Docker images...")
+    subprocess.run(
+      ["docker", "compose", "-f", yml_path, "pull"],
+      check=True,
+      capture_output=True,
+    )
+
+    # Bring up the stack
+    print("Starting Pluk services...")
     subprocess.run(
       ["docker", "compose", "-f", yml_path, "up", "-d"],
       check=True,
@@ -141,8 +168,7 @@ def start_pluk_services(home, yml_path):
     print("Pluk services are now running.")
   except subprocess.CalledProcessError as e:
     print("Error starting Pluk services:", e.stderr, file=sys.stderr)
-    return False
-
+    return
 
 def end_pluk_services(home, yml_path):
     """
@@ -153,11 +179,12 @@ def end_pluk_services(home, yml_path):
     """
     try:
       print(f"Stopping Pluk services...")
-      subprocess.run(["docker", "compose", "-f", yml_path, "stop"], check=True, capture_output=True)
+      subprocess.run(["docker", "compose", "-f", yml_path, "stop"], check=True)
       print("Pluk services stopped.")
     except subprocess.CalledProcessError as e:
       print("Error stopping Pluk services:", e.stderr, file=sys.stderr)
-      return False
+      return
+
 
 def main():
   """
@@ -188,6 +215,14 @@ def main():
       print("Pluk services are not running. Nothing to clean up.")
       return
     end_pluk_services(home, yml_path)
+    return
+
+  # Handle the status command
+  if len(sys.argv) > 1 and sys.argv[1] == "status":
+    if is_running:
+      print("Pluk services are running.")
+    else:
+      print("Pluk services are not running.")
     return
 
   # Ensure the Pluk services are running

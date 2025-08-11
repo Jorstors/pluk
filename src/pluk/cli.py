@@ -19,6 +19,34 @@ def cmd_init(args):
     print(f"Initializing repository at {args.path}")
     return
 
+def cmd_start(args):
+    """
+    Start the Pluk services.
+
+    This command starts all the required Docker containers for Pluk,
+    including the database, worker, and API services.
+    It will create the necessary Docker Compose configuration if it doesn't exist.
+    """
+    return
+
+def cmd_cleanup(args):
+    """
+    Stop the Pluk services.
+
+    This command stops all running Pluk Docker containers,
+    but does not remove data volumes.
+    """
+    return
+
+def cmd_status(args):
+    """
+    Check the status of Pluk services.
+
+    This command checks if all required Pluk services are running
+    and reports their current status.
+    """
+    return
+
 def cmd_search(args):
     """
     Search for a symbol in the current repository.
@@ -72,7 +100,7 @@ def build_parser():
     p = argparse.ArgumentParser(prog="plukd")
     sub = p.add_subparsers(dest="command", required=True)
 
-    # Define subcommands
+    # === Define subcommands ===
 
     # Initialize a repository
     p_init = sub.add_parser("init", help="Index a git repo")
@@ -98,6 +126,18 @@ def build_parser():
     p_diff = sub.add_parser("diff", help="Show differences for a symbol")
     p_diff.add_argument("symbol", help="Symbol name")
     p_diff.set_defaults(func=cmd_diff)
+
+    # Start Pluk services
+    p_start = sub.add_parser("start", help="Start Pluk services")
+    p_start.set_defaults(func=cmd_start)
+
+    # Stop Pluk services
+    p_cleanup = sub.add_parser("cleanup", help="Stop Pluk services")
+    p_cleanup.set_defaults(func=cmd_cleanup)
+
+    # Check Pluk services status
+    p_status = sub.add_parser("status", help="Check Pluk services status")
+    p_status.set_defaults(func=cmd_status)
 
     return p
 
