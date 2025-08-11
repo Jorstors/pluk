@@ -2,18 +2,18 @@
 
 Git-commit–aware symbol lookup & impact analysis engine
 
-Pluk gives developers “go-to-definition”, “find-all-references”, and “blast-radius” impact queries across one or more Git repositories. Heavy lifting (indexing, querying, storage) runs in isolated Docker containers; a lightweight host CLI bootstraps and delegates commands.
+Pluk gives developers “go-to-definition”, “find-all-references”, and “blast-radius” impact queries across one or more Git repositories. Heavy lifting (indexing, querying, storage) runs in Docker containers; a lightweight host shim (`pluk`) boots the stack and delegates commands into a thin CLI container (`plukd`) that talks to an internal API.
 
 ---
 
 ## Key Features
 
-- **symbol search** (`pluk search`) and definition lookup (`pluk define`)
-- **Impact analysis** (`pluk impact`) to trace downstream dependents via recursive CTEs & caching
-- **Commit-aware indexing**: evolves symbol graph across Git history (`pluk diff`)
-- **Zero-friction install**: `pip install pluk` + Docker & Compose
-- **Containerized backend**: PostgreSQL for the graph, Redis for cache
-- **Single Python codebase**: host shim (`pluk.bootstrap`) + container CLI (`pluk.cli`)
+- **Symbol search** (`pluk search`) and definition lookup (`pluk define`)
+- **Impact analysis** (`pluk impact`) to trace downstream dependents
+- **Commit-aware indexing** (`pluk diff`) across Git history
+- **Containerized backend**: PostgreSQL (graph) + Redis (broker/cache)
+- **Strict lifecycle**: `pluk start` is required before any commands
+- **Host controls**: `pluk status` to check, `pluk cleanup` to stop services
 
 ---
 
@@ -21,119 +21,96 @@ Pluk gives developers “go-to-definition”, “find-all-references”, and “
 
 1. **Install**
 
-   ```bash
-   pip install pluk
-   ```
+```bash
+pip install pluk
+```
 
-   Ensure Docker & Docker Compose are installed and your user can run `docker`.
+2. **Start services (required)**
 
-2. **Bootstrap & index**
+```bash
+pluk start
+```
 
-   ```bash
-   pluk init /path/to/your/repo
-   ```
+This creates/updates `~/.pluk/docker-compose.yml`, **pulls latest images**, and brings up: `postgres`, `redis`, `api` (FastAPI), `worker` (Celery), and `cli` (idle exec target). The API stays **internal** to the Docker network.
 
-   Sets up containers and indexes the repo.
+3. **Index and query**
 
-3. **Run queries**
+```bash
+pluk init /path/to/repo       # queue full indexing job (API→Redis→Celery→Postgres)
+pluk search MyClass           # symbol search; lists refs (API→Postgres, uses cache)
+pluk define my_function       # go to definition; prints file:line@commit
+pluk impact computeFoo        # blast-radius; downstream dependents (cached; recomputed on demand)
+pluk diff abc123 def456       # compare same symbool FROM git commit abc123 TO def456
+```
 
-   ```bash
-   pluk search MyClass         # search definitions & refs
-   pluk define my_function      # show definition location
-   pluk impact computeFoo        # trace downstream dependents
-   pluk diff abc123 def456        # symbol changes between commits
-   ```
+4. **Check / stop (host-side)**
 
-4. **Manage services**
-   ```bash
-   pluk start    # launch FastAPI server + worker
-   pluk cleanup   # teardown Docker Compose stack
-   ```
+```bash
+pluk status     # tells you if services are running
+pluk cleanup    # stops services (containers stay; fast restart)
+```
 
-All commands run on the host; Pluk manages Docker Compose under `~/.pluk/docker-compose.yml` by default.
+If you want a full teardown (remove containers/network), use:
+
+```bash
+docker compose -f ~/.pluk/docker-compose.yml down
+```
 
 ---
 
 ## Data Flow
 
-Pluk’s host shim (`pluk`) writes a Compose file and delegates commands into the container CLI (`plukd`). Inside the container, `plukd` interacts with Postgres and Redis; results stream back to your terminal.
+[![](https://mermaid.ink/img/pako:eNp9UtGO2jAQ_BVrHyqQAiKBhCSVKrWg6irRit6dVKmkqkyyl0Qkdmo7BUr4967D0eNe-rT27OzsztonSGWGEMNTJfdpwZVhq_tEMKbbba54U7A7qY0FGHsoynqTQFO1OzYoCGaakGECP2weRZaIV5VLme5Q_fyCZi_V7qKxWH0iibQqmUb1u0wxEQMrmL1leMCUGa5yNFdNxt6vLZ83t_yPXBvCX0jfSB4V8fb94Ya6wArV8YV5j1mpN4M-JGKrpKW_YSlPCxw-c5YfNoM1ucsVPnxdJUIf662sWO9p-Nqq3Qgbjd51_eylMLKzDm2KQp-5e3xcd9aGBSlc6OJXiy2SW73THXse52qkp6RS6Lb-L2WvSoPUNcNDR1PfNlDIM0Y9VIna5sCBXJUZxEa16ECNqub2CidblYApsMYEYjpmnN4KEnGmmoaL71LW1zIl27yA-IlXmm5tk3GDy5LTZup_qKLloFrIVhiIg8j3ehWIT3CAeOSF_tibzqahO43mURDNZw4cIXa9YBzOCJyEfjQJvDA4O_Cn7-yOPd-fBG7ou-48CN25A7QKI9Xny7_tv-_5L0GP5fk?type=png)](https://mermaid.live/edit#pako:eNp9UtGO2jAQ_BVrHyqQAiKBhCSVKrWg6irRit6dVKmkqkyyl0Qkdmo7BUr4967D0eNe-rT27OzsztonSGWGEMNTJfdpwZVhq_tEMKbbba54U7A7qY0FGHsoynqTQFO1OzYoCGaakGECP2weRZaIV5VLme5Q_fyCZi_V7qKxWH0iibQqmUb1u0wxEQMrmL1leMCUGa5yNFdNxt6vLZ83t_yPXBvCX0jfSB4V8fb94Ya6wArV8YV5j1mpN4M-JGKrpKW_YSlPCxw-c5YfNoM1ucsVPnxdJUIf662sWO9p-Nqq3Qgbjd51_eylMLKzDm2KQp-5e3xcd9aGBSlc6OJXiy2SW73THXse52qkp6RS6Lb-L2WvSoPUNcNDR1PfNlDIM0Y9VIna5sCBXJUZxEa16ECNqub2CidblYApsMYEYjpmnN4KEnGmmoaL71LW1zIl27yA-IlXmm5tk3GDy5LTZup_qKLloFrIVhiIg8j3ehWIT3CAeOSF_tibzqahO43mURDNZw4cIXa9YBzOCJyEfjQJvDA4O_Cn7-yOPd-fBG7ou-48CN25A7QKI9Xny7_tv-_5L0GP5fk)
 
-[![](https://mermaid.ink/img/pako:eNp9Uu9L40AQ_VeGAcXjYonNtk2CCJp-uIJ3FPGTRmTNbpOlzW7YbNC7tv_7zaY_oAp-yryZeW_mzWaNhRESU1yszHtRcevg_iHXAG33VlreVPDLtM4noI-y-9lzjs2qW8JFRRjaStU_cnzxLVKLXJ-Qp6ZYSvv6R7p3Y5c7GaGsLJwyGh7vdpk5yWVGO660tHt5ARc0C37C7Xx20KdOGlla2VLTIYTp3bH8IIXytf4LGS8q-Xm1s7PeByjtpOX9Hq3P783B9eXlDWzAh4Wpa65FC-dgOtd0bnO66VFw5rU0XxFjX_oif0I8DHnM5pCOWDTcHI193zuOJslm5zLXGGBplcDU2U4GWEtbcw9x7UVydJWsyX5KoeB0fMz1ljgN10_G1AeaNV1ZYbrgq5ZQ1wju5FRxer76mLV0PWkz02mHacJGvQima_zwcBAlwzEbJuEwikZRFOBfTAkNJqNJOGHhOGZJzLYB_uunhoM4TMIrqrAwYTGLxwGSH2fs792PSDdcqBK3_wFCz9YC?type=png)](https://mermaid.live/edit#pako:eNp9Uu9L40AQ_VeGAcXjYonNtk2CCJp-uIJ3FPGTRmTNbpOlzW7YbNC7tv_7zaY_oAp-yryZeW_mzWaNhRESU1yszHtRcevg_iHXAG33VlreVPDLtM4noI-y-9lzjs2qW8JFRRjaStU_cnzxLVKLXJ-Qp6ZYSvv6R7p3Y5c7GaGsLJwyGh7vdpk5yWVGO660tHt5ARc0C37C7Xx20KdOGlla2VLTIYTp3bH8IIXytf4LGS8q-Xm1s7PeByjtpOX9Hq3P783B9eXlDWzAh4Wpa65FC-dgOtd0bnO66VFw5rU0XxFjX_oif0I8DHnM5pCOWDTcHI193zuOJslm5zLXGGBplcDU2U4GWEtbcw9x7UVydJWsyX5KoeB0fMz1ljgN10_G1AeaNV1ZYbrgq5ZQ1wju5FRxer76mLV0PWkz02mHacJGvQima_zwcBAlwzEbJuEwikZRFOBfTAkNJqNJOGHhOGZJzLYB_uunhoM4TMIrqrAwYTGLxwGSH2fs792PSDdcqBK3_wFCz9YC)
+**How it works**
+
+- **Host shim (`pluk`)** writes the Compose file, **pulls images**, and runs `docker compose up`.
+- **CLI container (`plukd`)** is the exec target; it calls the API at `http://api:8000`.
+- **API (FastAPI)** serves read endpoints (`/search`, `/define`, `/impact`, `/diff`) and enqueues write jobs (`/reindex`) to **Redis**.
+- **Worker (Celery)** consumes jobs from **Redis**, clones/pulls repos into a volume (`/var/pluk/repos`), parses deltas, and writes to **Postgres**.
+- Reads never block on indexing; write progress can be polled via job status endpoints (planned).
 
 ---
 
-## Architecture
+## Architecture (current)
 
-```text
-[Host CLI: pluk] ── docker-compose ──▶ [Container: plukd]
-                                    │
-                                    ├─▶ Postgres (symbol graph)
-                                    └─▶ Redis (cache)
-```
-
-- **`pluk` (host shim)**
-
-  - Writes and manages `docker-compose.yml` under `~/.pluk/`
-  - Forwards user commands into the container via `docker compose exec`
-
-- **`plukd` (container CLI)**
-
-  - Implements `init`, `search`, `define`, `impact`, `diff`, `start`, `cleanup`
-  - Parses repos, builds AST index, executes queries with SQL & Python
-
-- **Postgres** stores commits, symbol definitions, and reference links
-- **Redis** caches expensive recursive queries for sub-second responses
+- **Single image, multiple roles**: Compose selects per-service `command`
+  - `api` → `uvicorn pluk.api:app --host 0.0.0.0 --port 8000`
+  - `worker` → `celery -A pluk.worker worker -l info`
+  - `cli` → `sleep infinity` (keeps container up for `docker compose exec`)
+- **Internal networking**: API is _not_ exposed to the host; CLI calls it over Docker DNS (`PLUK_API_URL=http://api:8000`).
+- **Config**: `PLUK_DATABASE_URL`, `PLUK_REDIS_URL` injected via Compose; worker uses `PLUK_REPOS_DIR=/var/pluk/repos`.
+- **Images**: by default the shim uses `jorstors/pluk:latest`, `postgres:16-alpine`, and `redis-alpine`
 
 ---
 
 ## Development
 
-```bash
-# Clone & install in editable mode
-git clone https://github.com/Jorstors/pluk.git
-cd pluk
-pip install -e .
-```
-
 - **Project layout** (`src/pluk`):
-
-  - `bootstrap.py` — host shim entrypoint (`pluk`)
+  - `shim.py` — host shim entrypoint (`pluk`)
   - `cli.py` — container CLI (`plukd`)
+  - `api.py` — FastAPI app (internal API)
+  - `worker.py` — Celery app & tasks
+- **Entry points** (`pyproject.toml`):
 
-- **Entry points** in `pyproject.toml`:
-  ```toml
-  [project.scripts]
-  pluk  = "pluk.bootstrap:main"
-  plukd = "pluk.cli:main"
-  ```
+```toml
+[project.scripts]
+pluk  = "pluk.shim:main"
+plukd = "pluk.cli:main"
+```
 
 ---
 
 ## Testing
 
-- **Unit tests** for argument parsing and shim logic (`pytest`)
-- **Integration tests** invoking `pluk init` on a sample repo
-
 ```bash
-pytest tests/
+pytest
 ```
 
-> **Note:** Docker daemon must be running locally.
+Docker must be running; services must be started via `pluk start` for integration tests.
 
 ---
 
-## 🔖 Versioning
+## License
 
-We use [bumpver](https://github.com/philipn/bumpver) for semantic versioning:
-
-```bash
-bumpver patch   # 0.1.0 → 0.1.1
-bumpver minor    # 0.1.1 → 0.2.0
-bumpver major     # 0.2.0 → 1.0.0
-```
-
----
-
-## 📄 License
-
-Distributed under the MIT License. See [LICENSE](LICENSE) for details.
+MIT License
