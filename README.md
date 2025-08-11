@@ -36,11 +36,11 @@ This creates/updates `~/.pluk/docker-compose.yml`, **pulls latest images**, and 
 3. **Index and query**
 
 ```bash
-pluk init /path/to/repo       # queue full indexing job (API→Redis→Celery→Postgres)
+pluk init /path/to/repo       # index a git repository (API→Redis→Celery→Postgres)
 pluk search MyClass           # symbol search; lists refs (API→Postgres, uses cache)
-pluk define my_function       # go to definition; prints file:line@commit
+pluk define my_function       # define a symbol; prints definition + file:line@commit
 pluk impact computeFoo        # blast-radius; downstream dependents (cached; recomputed on demand)
-pluk diff abc123 def456       # compare same symbool FROM git commit abc123 TO def456
+pluk diff abc123 def456       # show differences for a symbol (between commits)
 ```
 
 4. **Check / stop (host-side)**
