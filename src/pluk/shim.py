@@ -118,10 +118,9 @@ def ensure_running(home, yml_path):
       continue
 
   # Check if all required services are found
-  if found_services != required_services:
-    return False
-
-  return True
+  return {"running": bool(found_services),
+          "found": found_services,
+          "required": required_services}
 
 
 def start_pluk_services(home, yml_path):
@@ -201,11 +200,16 @@ def main():
 
   home = os.path.expanduser("~/.pluk")
   yml_path = os.path.join(home, "docker-compose.yml")
-  is_running = ensure_running(home, yml_path)
+  run_check = ensure_running(home, yml_path)
+
+  is_running = run_check["running"]
+  found_services = run_check["found"]
+  required_services = run_check["required"]
+  services_are_synced = found_services == required_services
 
   # Handle the start command separately
   if len(sys.argv) > 1 and sys.argv[1] == "start":
-    if is_running:
+    if is_running and services_are_synced:
       print("Pluk services are already running.")
       return
 
@@ -214,7 +218,7 @@ def main():
 
   # Handle the cleanup command
   if len(sys.argv) > 1 and sys.argv[1] == "cleanup":
-    if not is_running:
+    if not found_services:
       print("Pluk services are not running. Nothing to clean up.")
       return
     end_pluk_services(home, yml_path)
@@ -223,7 +227,11 @@ def main():
   # Handle the status command
   if len(sys.argv) > 1 and sys.argv[1] == "status":
     if is_running:
-      print("Pluk services are running.")
+      if services_are_synced:
+        print("Pluk services are running.")
+      else:
+        print("Pluk services are running, but found services do not match required services.")
+        print('   Run "pluk start" to sync services.')
     else:
       print("Pluk services are not running.")
     return
