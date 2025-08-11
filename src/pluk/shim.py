@@ -99,6 +99,7 @@ def ensure_running(home, yml_path):
     )
   except subprocess.CalledProcessError as e:
     print("Error checking Docker Compose status:", e.stderr, file=sys.stderr)
+    print('Please ensure Docker is installed, running, and accessible from your terminal. Try running "pluk start" again, and check for any error messages above.')
     return False
 
   required_services = {"postgres", "redis", "api", "worker", "cli"}
@@ -168,6 +169,7 @@ def start_pluk_services(home, yml_path):
     print("Pluk services are now running.")
   except subprocess.CalledProcessError as e:
     print("Error starting Pluk services:", e.stderr, file=sys.stderr)
+    print('Please ensure Docker is installed, running, and accessible from your terminal. Try running "pluk start" again, and check for any error messages above.')
     return
 
 def end_pluk_services(home, yml_path):
@@ -183,6 +185,7 @@ def end_pluk_services(home, yml_path):
       print("Pluk services stopped.")
     except subprocess.CalledProcessError as e:
       print("Error stopping Pluk services:", e.stderr, file=sys.stderr)
+      print('Please ensure Docker is installed, running, and accessible from your terminal. Try running "pluk start" again, and check for any error messages above.')
       return
 
 
