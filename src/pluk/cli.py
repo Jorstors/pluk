@@ -152,11 +152,7 @@ def cmd_diff(args):
     print(f"Showing differences for symbol: {args.symbol}")
 
     # Make a request to the Pluk API to get the diff
-    res = requests.get(f"{os.environ.get('PLUK_API_URL')}/diff/", json={
-        "symbol": args.symbol,
-        "from_commit": args.from_commit,
-        "to_commit": args.to_commit
-    })
+    res = requests.get(f"{os.environ.get('PLUK_API_URL')}/diff/{args.symbol}/{args.from_commit}/{args.to_commit}")
     if res.status_code == 200:
         res_obj = res.json()
         print("Differences found:")
