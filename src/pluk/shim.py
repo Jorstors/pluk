@@ -154,12 +154,12 @@ def start_pluk_services(home, yml_path):
 
   try:
     # Always pull the latest images before starting
-    # print("Pulling latest Docker images...")
-    # subprocess.run(
-    #   ["docker", "compose", "-f", yml_path, "pull"],
-    #   check=True,
-    #   capture_output=True,
-    # )
+    print("Pulling latest Docker images...")
+    subprocess.run(
+      ["docker", "compose", "-f", yml_path, "pull"],
+      check=True,
+      capture_output=True,
+    )
 
     # Bring up the stack
     print("Starting Pluk services...")

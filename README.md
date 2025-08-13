@@ -2,6 +2,12 @@
 
 Git-commit–aware symbol lookup & impact analysis engine
 
+---
+
+## What is a "symbol"?
+
+In Pluk, a **symbol** is any named entity in your codebase that can be referenced, defined, or impacted by changes. This includes functions, classes, methods, variables, and other identifiers that appear in your source code. Pluk tracks symbols across commits and repositories to enable powerful queries like "go to definition", "find all references", and "impact analysis".
+
 Pluk gives developers “go-to-definition”, “find-all-references”, and “blast-radius” impact queries across one or more Git repositories. Heavy lifting (indexing, querying, storage) runs in Docker containers; a lightweight host shim (`pluk`) boots the stack and delegates commands into a thin CLI container (`plukd`) that talks to an internal API.
 
 ---
@@ -36,12 +42,14 @@ This creates/updates `~/.pluk/docker-compose.yml`, **pulls latest images**, and 
 3. **Index and query**
 
 ```bash
-pluk init /path/to/repo       # index a git repository (API→Redis→Celery→Postgres)
-pluk search MyClass           # symbol search; lists refs (API→Postgres, uses cache)
-pluk define my_function       # define a symbol; prints definition + file:line@commit
-pluk impact computeFoo        # blast-radius; downstream dependents (cached; recomputed on demand)
-pluk diff abc123 def456       # show differences for a symbol (between commits)
+pluk init /path/to/repo           # queue full index (API→Redis→Celery→Postgres)
+pluk search MyClass               # fuzzy lookup; defs + refs (API→Postgres, cached)
+pluk define my_function           # show definition (file:line@commit)
+pluk impact computeFoo            # transitive dependents (blast radius; cached)
+pluk diff symbol abc123 def456    # symbol changes between commits abc123 → def456
 ```
+
+**Note:** CLI commands that poll for job status (like `pluk init`) now display real-time output, thanks to unbuffered Python output in the CLI container.
 
 4. **Check / stop (host-side)**
 
