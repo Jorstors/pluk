@@ -1,3 +1,5 @@
+# src/pluk/db.py
+
 import os
 from psycopg_pool import ConnectionPool
 from psycopg.rows import dict_row

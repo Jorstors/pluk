@@ -1,3 +1,5 @@
+# src/pluk/api.py
+
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pluk.worker import celery, reindex_repo
