@@ -3,6 +3,8 @@
 import argparse
 import sys
 import subprocess
+import os
+import requests
 import time
 
 # Initialize a repository
@@ -17,6 +19,28 @@ def cmd_init(args):
     into the Pluk database.
     """
     print(f"Initializing repository at {args.path}")
+    # Grab repo information to send to the API
+    repo_url = "https://github.com/user/repo.git"
+    commit = "HEAD"
+    # Make a request to the Pluk API to initialize the repository
+    reindex_res = requests.post(f"{os.environ.get('PLUK_API_URL')}/reindex/", json={
+        "repo_url": repo_url,
+        "commit": commit
+    })
+    if reindex_res.status_code == 200:
+        job_id = reindex_res.json()['job_id']
+        # Check job status
+        while True:
+            job_status_res = requests.get(f"{os.environ.get('PLUK_API_URL')}/status/{job_id}")
+            if job_status_res.status_code == 200:
+                status = job_status_res.json()['status']
+                print(f"Job status: {status}")
+                if status == "finished":
+                    break
+            time.sleep(0.1)
+        print("Repository initialized successfully.")
+    else:
+        print(f"Error initializing repository: {reindex_res.status_code}")
     return
 
 def cmd_start(args):
@@ -51,10 +75,27 @@ def cmd_search(args):
     """
     Search for a symbol in the current repository.
 
-    This command allows users to find symbols by name.
+    This command allows users to find symbols by name, and list its references
     """
     print(f"Searching for symbol: {args.symbol}")
-    return
+    # Make a request to the Pluk API to search for the symbol
+    res = requests.get(f"{os.environ.get('PLUK_API_URL')}/search/{args.symbol}")
+    if res.status_code == 200:
+        res_obj = res.json()
+        # Process the response JSON and list references
+        for symbol in res_obj['symbols'] or []:
+            print(f"Found symbol: {symbol['name']}")
+            # Location: file:line@commit
+            print(f"Located at: {symbol['location']}@{symbol['commit']}")
+            print("References:")
+            for ref in symbol['references'] or []:
+                print(f" - {ref}")
+            if not symbol['references']:
+                print("No references found.")
+        if not res_obj['symbols']:
+            print("No symbols found.")
+    else:
+        print(f"Error searching for symbol: {res.status_code}")
 
 def cmd_define(args):
     """
@@ -62,20 +103,44 @@ def cmd_define(args):
 
     This command allows users to define a symbol,
     which can be useful for documentation or metadata purposes.
+
+    Returns the definition of the symbol, and its location in the current repository.
     """
     print(f"Defining symbol: {args.symbol}")
-    return
+    # Make a request to the Pluk API to define the symbol
+    # API returns the symbol definition and its location
+    res = requests.get(f"{os.environ.get('PLUK_API_URL')}/define/{args.symbol}")
+    if res.status_code == 200:
+        res_obj = res.json()
+        print(f"Symbol definition: {res_obj['definition']}")
+        # Location: file:line@commit
+        print(f"Located at: {res_obj['location']}@{res_obj['commit']}")
+    else:
+        print(f"Error defining symbol: {res.status_code}")
 
 def cmd_impact(args):
     """
     Analyze the impact of a symbol in the codebase.
 
-    This command allows users to see what parts of the code
-    base would be affected by changes to a symbol.
-    It can be useful for understanding dependencies and potential side effects.
+    Shows everything that depends on the symbol, transitively.
+    Starts with direct callers/users, then expands to callers of those callers,
+    importers of importers, subclass chains, etc.
+
+    Scope: transitive closure over the dependency graph (calls/imports/inheritance).
     """
     print(f"Analyzing impact of symbol: {args.symbol}")
-    return
+    # Make a request to the Pluk API to analyze impact
+    res = requests.get(f"{os.environ.get('PLUK_API_URL')}/impact/{args.symbol}")
+    if res.status_code == 200:
+        res_obj = res.json()
+        # Process the response JSON and list impacted files
+        print("Impacted files:")
+        for file in res_obj['impacted_files'] or []:
+            print(f" - {file}")
+        if not res_obj['impacted_files']:
+            print("No impacted files found.")
+    else:
+        print(f"Error analyzing impact: {res.status_code}")
 
 def cmd_diff(args):
     """
@@ -85,7 +150,22 @@ def cmd_diff(args):
     over time, including modifications to its definition and usage.
     """
     print(f"Showing differences for symbol: {args.symbol}")
-    return
+
+    # Make a request to the Pluk API to get the diff
+    res = requests.get(f"{os.environ.get('PLUK_API_URL')}/diff/", json={
+        "symbol": args.symbol,
+        "from_commit": args.from_commit,
+        "to_commit": args.to_commit
+    })
+    if res.status_code == 200:
+        res_obj = res.json()
+        print("Differences found:")
+        for diff in res_obj['differences'] or []:
+            print(f" - {diff}")
+        if not res_obj['differences']:
+            print("No differences found.")
+    else:
+        print(f"Error showing differences: {res.status_code}")
 
 def build_parser():
     """
@@ -125,6 +205,8 @@ def build_parser():
     # Show differences for a symbol (between commits)
     p_diff = sub.add_parser("diff", help="Show differences for a symbol")
     p_diff.add_argument("symbol", help="Symbol name")
+    p_diff.add_argument("from_commit", help="Commit to compare from")
+    p_diff.add_argument("to_commit", help="Commit to compare to")
     p_diff.set_defaults(func=cmd_diff)
 
     # Start Pluk services
