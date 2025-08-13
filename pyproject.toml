@@ -21,7 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 api    = ["fastapi>=0.112", "uvicorn[standard]>=0.30"]
 worker = ["celery>=5.3", "redis>=5.0", "gitpython>=3.1"]
-db     = ["psycopg[binary]>=3.1"]
+db     = ["psycopg[binary,pool]>=3.1"]
 
 [project.scripts]
 pluk = "pluk.shim:main"

@@ -1,5 +1,6 @@
 import os
 from celery import Celery
+from time import sleep
 
 celery = Celery(
   "worker",
@@ -8,6 +9,8 @@ celery = Celery(
 )
 
 @celery.task
-def reindex_repo(repo_url: str, commit: str = "HEAD"):
+def reindex_repo(repo_url: str, commit: str):
     # TODO: clone into a volume, parse AST, write to Postgres
-    return {"status": "queued", "repo": repo_url, "commit": commit}
+    print(f"Reindexing {repo_url} at {commit}")
+    sleep(5)  # Simulate long-running task
+    return {"status": "finished"}
