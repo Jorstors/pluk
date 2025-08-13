@@ -20,25 +20,29 @@ def cmd_init(args):
     """
     print(f"Initializing repository at {args.path}")
     # Grab repo information to send to the API
-    repo_url = "https://github.com/user/repo.git"
-    commit = "HEAD"
     # Make a request to the Pluk API to initialize the repository
     reindex_res = requests.post(f"{os.environ.get('PLUK_API_URL')}/reindex/", json={
-        "repo_url": repo_url,
-        "commit": commit
+        "repo_url": args.repo_url,
+        "commit": args.repo_commit
     })
     if reindex_res.status_code == 200:
+        sys.stdout.write("[+] Indexing started...")
         job_id = reindex_res.json()['job_id']
         # Check job status
+        start_time = time.perf_counter()
         while True:
+            elapsed_time = time.perf_counter() - start_time
             job_status_res = requests.get(f"{os.environ.get('PLUK_API_URL')}/status/{job_id}")
             if job_status_res.status_code == 200:
                 status = job_status_res.json()['status']
-                print(f"Job status: {status}")
                 if status == "finished":
                     break
+                # Update the console output with the current indexing status
+                sys.stdout.write(f"\r[+] Indexing {elapsed_time:.1f}s: {status}     ")
+                sys.stdout.flush()
             time.sleep(0.1)
-        print("Repository initialized successfully.")
+
+        sys.stdout.write(f"\r[x] Repository initialized successfully.                                       ")
     else:
         print(f"Error initializing repository: {reindex_res.status_code}")
     return
@@ -181,6 +185,8 @@ def build_parser():
     # Initialize a repository
     p_init = sub.add_parser("init", help="Index a git repo")
     p_init.add_argument("path", help="Path to the repository")
+    p_init.add_argument("repo_url", nargs="?", default=None, help=argparse.SUPPRESS)
+    p_init.add_argument("repo_commit", nargs="?", default=None, help=argparse.SUPPRESS)
     p_init.set_defaults(func=cmd_init)
 
     # Search for a symbols

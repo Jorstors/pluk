@@ -211,7 +211,7 @@ def main():
   services_are_synced = found_services == required_services
 
   # Handle the start command separately
-  if len(sys.argv) > 1 and sys.argv[1] == "start":
+  if len(sys.argv) == 2 and sys.argv[1] == "start":
     if is_running and services_are_synced:
       print("Pluk services are already running.")
       return
@@ -220,7 +220,7 @@ def main():
     return
 
   # Handle the cleanup command
-  if len(sys.argv) > 1 and sys.argv[1] == "cleanup":
+  if len(sys.argv) == 2 and sys.argv[1] == "cleanup":
     if not found_services:
       print("Pluk services are not running. Nothing to clean up.")
       return
@@ -228,7 +228,7 @@ def main():
     return
 
   # Handle the status command
-  if len(sys.argv) > 1 and sys.argv[1] == "status":
+  if len(sys.argv) == 2 and sys.argv[1] == "status":
     if is_running:
       if services_are_synced:
         print("Pluk services are running.")
@@ -238,6 +238,37 @@ def main():
     else:
       print("Pluk services are not running.")
     return
+
+  init_checked = False
+  # Grab the remote repository URL and commit hash from path
+  if len(sys.argv) == 3 and sys.argv[1] == "init" and sys.argv[2][0] != "-":
+    if not os.path.isdir(sys.argv[2]):
+      print(f"    Error: {sys.argv[2]} is not a valid directory.")
+      return
+    try:
+      repo_url = subprocess.check_output(
+        ["git", "-C", sys.argv[2], "remote", "get-url", "origin"],
+        text=True
+      ).strip()
+      print("Repository URL:", repo_url)
+
+      repo_commit = subprocess.check_output(
+        ["git", "-C", sys.argv[2], "rev-parse", "HEAD"],
+        text=True
+      ).strip()
+      print("Repository commit:", repo_commit)
+
+      # Set new system arguments
+      sys.argv.append(repo_url)
+      sys.argv.append(repo_commit)
+      init_checked = True
+
+    except Exception as e:
+      print(f"No remote repository found in {sys.argv[2]}")
+      return
+
+  if len(sys.argv) > 2 and sys.argv[1] == "init" and not init_checked:
+    sys.argv = ["pluk", "init", "-h"]
 
   # Ensure the Pluk services are running
   if not is_running:
@@ -257,16 +288,25 @@ def main():
       cmd,
       stdout=subprocess.PIPE,
       stderr=subprocess.PIPE,
-      text=True
     )
 
     # Read and print output in real-time
-    for line in process.stdout:
-      print(line, end="")
+    while True:
+      out_byte = process.stdout.read(1)
+      if not out_byte:
+        break
+      out_char = out_byte.decode('utf-8', errors='replace')
+      sys.stdout.write(out_char)
+      sys.stdout.flush()
 
-    # Read any errors as well
-    for line in process.stderr:
-      print(line, end="", file=sys.stderr)
+
+    while True:
+      err_byte = process.stderr.read(1)
+      if not err_byte:
+        break
+      err_char = err_byte.decode('utf-8', errors='replace')
+      sys.stderr.write(err_char)
+      sys.stderr.flush()
 
     process.wait()
 
