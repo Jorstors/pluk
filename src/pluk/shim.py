@@ -204,6 +204,7 @@ def main():
   home = os.path.expanduser("~/.pluk")
   yml_path = os.path.join(home, "docker-compose.yml")
   run_check = ensure_running(home, yml_path)
+  env = os.environ.copy()
 
   is_running = run_check["running"]
   found_services = run_check["found"]
@@ -239,6 +240,7 @@ def main():
       print("Pluk services are not running.")
     return
 
+  # Set repo env variables for plukd (container)
   init_checked = False
   # Grab the remote repository URL and commit hash from path
   if len(sys.argv) == 3 and sys.argv[1] == "init" and sys.argv[2][0] != "-":
@@ -250,25 +252,20 @@ def main():
         ["git", "-C", sys.argv[2], "remote", "get-url", "origin"],
         text=True
       ).strip()
-      print("Repository URL:", repo_url)
 
       repo_commit = subprocess.check_output(
         ["git", "-C", sys.argv[2], "rev-parse", "HEAD"],
         text=True
       ).strip()
-      print("Repository commit:", repo_commit)
 
-      # Set new system arguments
-      sys.argv.append(repo_url)
-      sys.argv.append(repo_commit)
+      # Set new environment variables
+      env["PLUK_REPO_URL"] = repo_url
+      env["PLUK_REPO_COMMIT"] = repo_commit
       init_checked = True
 
     except Exception as e:
       print(f"No remote repository found in {sys.argv[2]}")
       return
-
-  if len(sys.argv) > 2 and sys.argv[1] == "init" and not init_checked:
-    sys.argv = ["pluk", "init", "-h"]
 
   # Ensure the Pluk services are running
   if not is_running:
@@ -279,7 +276,11 @@ def main():
   # === Forward commands to plukd (container) CLI ===
 
   cmd = [
-    "docker", "compose", "-f", yml_path, "exec", "cli", "plukd"
+    "docker", "compose", "-f", yml_path, "exec",
+    # Send repo information as environment variables
+    "-e", f"PLUK_REPO_URL={env['PLUK_REPO_URL']}",
+    "-e", f"PLUK_REPO_COMMIT={env['PLUK_REPO_COMMIT']}",
+    "cli", "plukd"
   ] + sys.argv[1:]
 
   # Execute the command and capture output

@@ -2,9 +2,7 @@
 
 import argparse
 import sys
-import subprocess
 import os
-import requests
 import time
 
 # Initialize a repository
@@ -18,12 +16,15 @@ def cmd_init(args):
     Immediately parses the repository, indexing its contents
     into the Pluk database.
     """
+    import requests
     print(f"Initializing repository at {args.path}")
     # Grab repo information to send to the API
+    repo_url = os.environ.get("PLUK_REPO_URL")
+    repo_commit = os.environ.get("PLUK_REPO_COMMIT")
     # Make a request to the Pluk API to initialize the repository
     reindex_res = requests.post(f"{os.environ.get('PLUK_API_URL')}/reindex/", json={
-        "repo_url": args.repo_url,
-        "commit": args.repo_commit
+        "repo_url": repo_url,
+        "commit": repo_commit
     })
     if reindex_res.status_code == 200:
         sys.stdout.write("[+] Indexing started...")
@@ -81,6 +82,7 @@ def cmd_search(args):
 
     This command allows users to find symbols by name, and list its references
     """
+    import requests
     print(f"Searching for symbol: {args.symbol}")
     # Make a request to the Pluk API to search for the symbol
     res = requests.get(f"{os.environ.get('PLUK_API_URL')}/search/{args.symbol}")
@@ -110,6 +112,7 @@ def cmd_define(args):
 
     Returns the definition of the symbol, and its location in the current repository.
     """
+    import requests
     print(f"Defining symbol: {args.symbol}")
     # Make a request to the Pluk API to define the symbol
     # API returns the symbol definition and its location
@@ -132,6 +135,7 @@ def cmd_impact(args):
 
     Scope: transitive closure over the dependency graph (calls/imports/inheritance).
     """
+    import requests
     print(f"Analyzing impact of symbol: {args.symbol}")
     # Make a request to the Pluk API to analyze impact
     res = requests.get(f"{os.environ.get('PLUK_API_URL')}/impact/{args.symbol}")
@@ -153,6 +157,7 @@ def cmd_diff(args):
     This command allows users to see how a symbol has changed
     over time, including modifications to its definition and usage.
     """
+    import requests
     print(f"Showing differences for symbol: {args.symbol}")
 
     # Make a request to the Pluk API to get the diff
@@ -185,8 +190,6 @@ def build_parser():
     # Initialize a repository
     p_init = sub.add_parser("init", help="Index a git repo")
     p_init.add_argument("path", help="Path to the repository")
-    p_init.add_argument("repo_url", nargs="?", default=None, help=argparse.SUPPRESS)
-    p_init.add_argument("repo_commit", nargs="?", default=None, help=argparse.SUPPRESS)
     p_init.set_defaults(func=cmd_init)
 
     # Search for a symbols
