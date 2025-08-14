@@ -1,3 +1,5 @@
+# src/pluk/worker.py
+
 import os
 from celery import Celery
 from time import sleep

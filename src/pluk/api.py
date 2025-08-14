@@ -1,3 +1,5 @@
+# src/pluk/api.py
+
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pluk.worker import celery, reindex_repo
@@ -62,6 +64,6 @@ def search(symbol: str):
 def impact(symbol: str):
     return JSONResponse(status_code=200, content={"impacted_files": ["file1.py", "file2.py"]})
 
-@app.get("/diff")
-def diff(request: DiffRequest):
+@app.get("/diff/{symbol}/{from_commit}/{to_commit}")
+def diff(symbol: str, from_commit: str, to_commit: str):
     return JSONResponse(status_code=200, content={"differences": ["diff1", "diff2"]})

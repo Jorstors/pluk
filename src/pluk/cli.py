@@ -2,9 +2,7 @@
 
 import argparse
 import sys
-import subprocess
 import os
-import requests
 import time
 
 # Initialize a repository
@@ -18,27 +16,34 @@ def cmd_init(args):
     Immediately parses the repository, indexing its contents
     into the Pluk database.
     """
+    import requests
     print(f"Initializing repository at {args.path}")
     # Grab repo information to send to the API
-    repo_url = "https://github.com/user/repo.git"
-    commit = "HEAD"
+    repo_url = os.environ.get("PLUK_REPO_URL")
+    repo_commit = os.environ.get("PLUK_REPO_COMMIT")
     # Make a request to the Pluk API to initialize the repository
     reindex_res = requests.post(f"{os.environ.get('PLUK_API_URL')}/reindex/", json={
         "repo_url": repo_url,
-        "commit": commit
+        "commit": repo_commit
     })
     if reindex_res.status_code == 200:
+        sys.stdout.write("[+] Indexing started...")
         job_id = reindex_res.json()['job_id']
         # Check job status
+        start_time = time.perf_counter()
         while True:
+            elapsed_time = time.perf_counter() - start_time
             job_status_res = requests.get(f"{os.environ.get('PLUK_API_URL')}/status/{job_id}")
             if job_status_res.status_code == 200:
                 status = job_status_res.json()['status']
-                print(f"Job status: {status}")
                 if status == "finished":
                     break
+                # Update the console output with the current indexing status
+                sys.stdout.write(f"\r[+] Indexing {elapsed_time:.1f}s: {status}     ")
+                sys.stdout.flush()
             time.sleep(0.1)
-        print("Repository initialized successfully.")
+
+        sys.stdout.write(f"\r[x] Repository initialized successfully.                                       ")
     else:
         print(f"Error initializing repository: {reindex_res.status_code}")
     return
@@ -77,6 +82,7 @@ def cmd_search(args):
 
     This command allows users to find symbols by name, and list its references
     """
+    import requests
     print(f"Searching for symbol: {args.symbol}")
     # Make a request to the Pluk API to search for the symbol
     res = requests.get(f"{os.environ.get('PLUK_API_URL')}/search/{args.symbol}")
@@ -106,6 +112,7 @@ def cmd_define(args):
 
     Returns the definition of the symbol, and its location in the current repository.
     """
+    import requests
     print(f"Defining symbol: {args.symbol}")
     # Make a request to the Pluk API to define the symbol
     # API returns the symbol definition and its location
@@ -128,6 +135,7 @@ def cmd_impact(args):
 
     Scope: transitive closure over the dependency graph (calls/imports/inheritance).
     """
+    import requests
     print(f"Analyzing impact of symbol: {args.symbol}")
     # Make a request to the Pluk API to analyze impact
     res = requests.get(f"{os.environ.get('PLUK_API_URL')}/impact/{args.symbol}")
@@ -149,14 +157,11 @@ def cmd_diff(args):
     This command allows users to see how a symbol has changed
     over time, including modifications to its definition and usage.
     """
+    import requests
     print(f"Showing differences for symbol: {args.symbol}")
 
     # Make a request to the Pluk API to get the diff
-    res = requests.get(f"{os.environ.get('PLUK_API_URL')}/diff/", json={
-        "symbol": args.symbol,
-        "from_commit": args.from_commit,
-        "to_commit": args.to_commit
-    })
+    res = requests.get(f"{os.environ.get('PLUK_API_URL')}/diff/{args.symbol}/{args.from_commit}/{args.to_commit}")
     if res.status_code == 200:
         res_obj = res.json()
         print("Differences found:")
