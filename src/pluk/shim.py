@@ -2,6 +2,8 @@
 
 import os, subprocess, sys, textwrap
 
+service_mismatch_warning = False
+
 COMPOSE_YML = textwrap.dedent("""
 services:
   postgres:
@@ -108,22 +110,27 @@ def ensure_running(home, yml_path):
   required_services = {"postgres", "redis", "api", "worker", "cli"}
   found_services = set()
 
-  lines = res.stdout.splitlines()
+  json_status_lines = res.stdout.splitlines()
 
   # Parse line by line json output
-  for line in lines:
+  for status_line in json_status_lines:
     try:
-      res_object = json.loads(line)
+      res_object = json.loads(status_line)
       if res_object["Service"] in required_services:
         found_services.add(res_object["Service"])
     except (json.JSONDecodeError, KeyError) as e:
       print(f"Warning: Error parsing service info: {e}", file=sys.stderr)
       continue
 
-  # Check if all required services are found
-  return {"running": bool(found_services),
-          "found": found_services,
-          "required": required_services}
+  all_services_running = found_services == required_services
+  if found_services and found_services != required_services:
+    global service_mismatch_warning
+    service_mismatch_warning = True
+    print("WARNING: Some Pluk services are running, but found services do not match required services.")
+    print('   Run "pluk start" to sync services.')
+    print('   Run "pluk cleanup" to stop all services.')
+
+  return all_services_running
 
 
 def start_pluk_services(home, yml_path):
@@ -203,17 +210,13 @@ def main():
 
   home = os.path.expanduser("~/.pluk")
   yml_path = os.path.join(home, "docker-compose.yml")
-  run_check = ensure_running(home, yml_path)
-  env = os.environ.copy()
-
-  is_running = run_check["running"]
-  found_services = run_check["found"]
-  required_services = run_check["required"]
-  services_are_synced = found_services == required_services
+  all_services_running = ensure_running(home, yml_path)
+  env = {}
+  global service_mismatch_warning
 
   # Handle the start command separately
   if len(sys.argv) == 2 and sys.argv[1] == "start":
-    if is_running and services_are_synced:
+    if all_services_running:
       print("Pluk services are already running.")
       return
 
@@ -222,7 +225,7 @@ def main():
 
   # Handle the cleanup command
   if len(sys.argv) == 2 and sys.argv[1] == "cleanup":
-    if not found_services:
+    if not all_services_running and not service_mismatch_warning:
       print("Pluk services are not running. Nothing to clean up.")
       return
     end_pluk_services(home, yml_path)
@@ -230,18 +233,22 @@ def main():
 
   # Handle the status command
   if len(sys.argv) == 2 and sys.argv[1] == "status":
-    if is_running:
-      if services_are_synced:
+    if all_services_running:
         print("Pluk services are running.")
-      else:
-        print("Pluk services are running, but found services do not match required services.")
-        print('   Run "pluk start" to sync services.')
     else:
       print("Pluk services are not running.")
     return
 
-  # Set repo env variables for plukd (container)
-  init_checked = False
+  if not all_services_running:
+    print("Pluk services are not running. Please start them with:")
+    print('   "pluk start"')
+    return
+
+  # === Forward commands to plukd (container) CLI ===
+
+  # First, check if the init command is being run - if so,
+  # set repo env variables for plukd (container)
+
   # Grab the remote repository URL and commit hash from path
   if len(sys.argv) == 3 and sys.argv[1] == "init" and sys.argv[2][0] != "-":
     if not os.path.isdir(sys.argv[2]):
@@ -261,27 +268,23 @@ def main():
       # Set new environment variables
       env["PLUK_REPO_URL"] = repo_url
       env["PLUK_REPO_COMMIT"] = repo_commit
-      init_checked = True
 
     except Exception as e:
       print(f"No remote repository found in {sys.argv[2]}")
       return
 
-  # Ensure the Pluk services are running
-  if not is_running:
-    print("Pluk services are not running. Please start them with:")
-    print('   "pluk start"')
-    return
-
-  # === Forward commands to plukd (container) CLI ===
-
   cmd = [
     "docker", "compose", "-f", yml_path, "exec",
-    # Send repo information as environment variables
-    "-e", f"PLUK_REPO_URL={env['PLUK_REPO_URL']}",
-    "-e", f"PLUK_REPO_COMMIT={env['PLUK_REPO_COMMIT']}",
-    "cli", "plukd"
-  ] + sys.argv[1:]
+  ]
+
+  if "PLUK_REPO_URL" in env:
+    cmd += ["-e", f"PLUK_REPO_URL={env['PLUK_REPO_URL']}"]
+
+  if "PLUK_REPO_COMMIT" in env:
+    cmd += ["-e", f"PLUK_REPO_COMMIT={env['PLUK_REPO_COMMIT']}"]
+
+  cmd += ["cli", "plukd"]
+  cmd += sys.argv[1:]
 
   # Execute the command and capture output
   try:
