@@ -39,11 +39,11 @@ def cmd_init(args):
                 if status == "finished":
                     break
                 # Update the console output with the current indexing status
-                sys.stdout.write(f"\r[+] Indexing {elapsed_time:.1f}s: {status}     ")
+                sys.stdout.write(f"\r[-] Indexing {elapsed_time:.1f}s: {status}     ")
                 sys.stdout.flush()
             time.sleep(0.1)
 
-        sys.stdout.write(f"\r[x] Repository initialized successfully.                                       ")
+        sys.stdout.write(f"\r[+] Repository initialized successfully.                                       ")
     else:
         print(f"Error initializing repository: {reindex_res.status_code}")
     return
