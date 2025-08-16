@@ -47,7 +47,8 @@ def reindex(request: ReindexRequest):
 def status(job_id: str):
     res = celery.AsyncResult(job_id)
     if res.ready():
-        return JSONResponse(status_code=200, content={"status": "finished", "result": res.result})
+        job_result = res.result
+        return JSONResponse(status_code=200, content={"status": res.status, "result": job_result})
     return JSONResponse(status_code=200, content={"status": res.status})
 
 # === Data base queries ===
