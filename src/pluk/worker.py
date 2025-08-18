@@ -21,10 +21,11 @@ def reindex_repo(repo_url: str, commit_sha: str):
     print(f"Reindexing {repo_url} at {commit_sha}")
     # Clone the repo into var/pluk/repos
     try:
-      repo_name = repo_url.split('/')[-1]                                           # project.git
-      absolute_repo_path = f"/var/pluk/repos/{repo_name}"                           # /var/pluk/repos/project.git
-      absolute_repo_worktree_path = f"{absolute_repo_path}/worktrees/{commit_sha}"  # /var/pluk/repos/project.git/worktree/{commit}
-      absolute_sha_path = f"{absolute_repo_path}/.sha"                              # /var/pluk/repos/project.git/.sha
+      repo_name = repo_url.split('/')[-1]                                                   # project.git
+      absolute_repo_path = f"/var/pluk/repos/{repo_name}"                                   # /var/pluk/repos/project.git
+      relative_repo_worktree_path = f"worktrees/{commit_sha}"                               # worktrees/{commit}
+      absolute_repo_worktree_path = f"{absolute_repo_path}/{relative_repo_worktree_path}"   # /var/pluk/repos/project.git/worktree/{commit}
+      absolute_sha_path = f"{absolute_repo_path}/.sha"                                      # /var/pluk/repos/project.git/.sha
 
       # Read the previous commit SHA if it exists
       prev_commit = None
@@ -61,10 +62,13 @@ def reindex_repo(repo_url: str, commit_sha: str):
 
       # Makes var/pluk/repos/{repo_name}/worktree
       print(f"Checking out commit {commit_sha} in {absolute_repo_path}...")
-      subprocess.run(
-        ["git", "-C", absolute_repo_path, "worktree", "add", absolute_repo_worktree_path, commit_sha],
-        check=True
-      )
+      if not os.path.exists(absolute_repo_worktree_path):
+        subprocess.run(
+          ["git", "-C", absolute_repo_path, "worktree", "add", relative_repo_worktree_path, commit_sha],
+          check=True
+        )
+      else:
+        print(f"Worktree {absolute_repo_worktree_path} already exists, previous worker didn't remove it. Continuing...")
 
       # TODO: Run u-ctags on the worktree
 
@@ -88,7 +92,7 @@ def reindex_repo(repo_url: str, commit_sha: str):
         print(f"Removing worktree for {commit_sha} in {absolute_repo_path}...")
         try:
           subprocess.run(
-              ["git", "-C", absolute_repo_path, "worktree", "remove", absolute_repo_worktree_path, "--force"],
+              ["git", "-C", absolute_repo_path, "worktree", "remove", "--force",  commit_sha],
           )
         except subprocess.CalledProcessError as e:
           print(f"Subprocess error: {e}")
