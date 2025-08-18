@@ -35,9 +35,18 @@ def cmd_init(args):
             elapsed_time = time.perf_counter() - start_time
             job_status_res = requests.get(f"{os.environ.get('PLUK_API_URL')}/status/{job_id}")
             if job_status_res.status_code == 200:
-                status = job_status_res.json()['status']
-                if status == "finished":
-                    break
+                res_obj = job_status_res.json()
+                status = res_obj['status']
+                if status == "SUCCESS":
+                    job_result = res_obj['result']
+                    if job_result['status'] == "FINISHED":
+                        break
+                    elif job_result['status'] == "ERROR":
+                        print(f"\n[/] Error initializing repository: {job_result['error_message']}")
+                        return
+                elif status == "FAILURE":
+                    print(f"\n[/] Failed to initialize repository: {status}")
+                    return
                 # Update the console output with the current indexing status
                 sys.stdout.write(f"\r[-] Indexing {elapsed_time:.1f}s: {status}     ")
                 sys.stdout.flush()
