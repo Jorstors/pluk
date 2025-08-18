@@ -11,20 +11,20 @@ celery = Celery(
 )
 
 @celery.task
-def reindex_repo(repo_url: str, commit: str):
+def reindex_repo(repo_url: str, commit_sha: str):
     """
     Reindex a repository by cloning it, checking out a specific commit sha,
     and then parsing it with u-ctags.
 
     Parsed data is stored in a Postgres database.
     """
-    print(f"Reindexing {repo_url} at {commit}")
+    print(f"Reindexing {repo_url} at {commit_sha}")
     # Clone the repo into var/pluk/repos
     try:
-      repo_name = repo_url.split('/')[-1]                                       # project.git
-      absolute_repo_path = f"/var/pluk/repos/{repo_name}"                       # /var/pluk/repos/project.git
-      absolute_repo_worktree_path = f"{absolute_repo_path}/worktrees/{commit}"  # /var/pluk/repos/project.git/worktree/{commit}
-      absolute_sha_path = f"{absolute_repo_path}/.sha"                          # /var/pluk/repos/project.git/.sha
+      repo_name = repo_url.split('/')[-1]                                           # project.git
+      absolute_repo_path = f"/var/pluk/repos/{repo_name}"                           # /var/pluk/repos/project.git
+      absolute_repo_worktree_path = f"{absolute_repo_path}/worktrees/{commit_sha}"  # /var/pluk/repos/project.git/worktree/{commit}
+      absolute_sha_path = f"{absolute_repo_path}/.sha"                              # /var/pluk/repos/project.git/.sha
 
       # Read the previous commit SHA if it exists
       prev_commit = None
@@ -48,8 +48,8 @@ def reindex_repo(repo_url: str, commit: str):
           print(f"No changes fetched for {absolute_repo_path}")
 
       # If nothing has changed since the last indexed commit, skip reindexing
-      if os.path.exists(absolute_repo_path) and prev_commit == commit and not has_fetched_changes:
-        print(f"Repository {absolute_repo_path} is already at {commit}, skipping...")
+      if os.path.exists(absolute_repo_path) and prev_commit == commit_sha and not has_fetched_changes:
+        print(f"Repository {absolute_repo_path} is already at {commit_sha}, skipping...")
         return {"status": "FINISHED"}
 
       if not os.path.exists(absolute_repo_path):
@@ -60,15 +60,17 @@ def reindex_repo(repo_url: str, commit: str):
           )
 
       # Makes var/pluk/repos/{repo_name}/worktree
-      print(f"Checking out commit {commit} in {absolute_repo_path}...")
+      print(f"Checking out commit {commit_sha} in {absolute_repo_path}...")
       subprocess.run(
-        ["git", "-C", absolute_repo_path, "worktree", "add", absolute_repo_worktree_path, commit],
+        ["git", "-C", absolute_repo_path, "worktree", "add", absolute_repo_worktree_path, commit_sha],
         check=True
       )
 
+      # TODO: Run u-ctags on the worktree
+
       # Save the current commit SHA
       with open(absolute_sha_path, "w") as f:
-        f.write(commit)
+        f.write(commit_sha)
 
     except subprocess.CalledProcessError as e:
         print(f"Subprocess error: {e}")
@@ -83,7 +85,7 @@ def reindex_repo(repo_url: str, commit: str):
     finally:
       # Removes var/pluk/repos/{repo_name}/{commit}/
       if os.path.exists(absolute_repo_worktree_path):
-        print(f"Removing worktree for {commit} in {absolute_repo_path}...")
+        print(f"Removing worktree for {commit_sha} in {absolute_repo_path}...")
         try:
           subprocess.run(
               ["git", "-C", absolute_repo_path, "worktree", "remove", absolute_repo_worktree_path, "--force"],

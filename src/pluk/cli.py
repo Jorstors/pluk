@@ -20,11 +20,11 @@ def cmd_init(args):
     print(f"Initializing repository at {args.path}")
     # Grab repo information to send to the API
     repo_url = os.environ.get("PLUK_REPO_URL")
-    repo_commit = os.environ.get("PLUK_REPO_COMMIT")
+    repo_commit_sha = os.environ.get("PLUK_REPO_COMMIT_SHA")
     # Make a request to the Pluk API to initialize the repository
     reindex_res = requests.post(f"{os.environ.get('PLUK_API_URL')}/reindex/", json={
         "repo_url": repo_url,
-        "commit": repo_commit
+        "commit_sha": repo_commit_sha
     })
     if reindex_res.status_code == 200:
         sys.stdout.write("[+] Indexing started...")

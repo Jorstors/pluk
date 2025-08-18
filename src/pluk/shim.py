@@ -267,7 +267,7 @@ def main():
 
       # Set new environment variables
       env["PLUK_REPO_URL"] = repo_url
-      env["PLUK_REPO_COMMIT"] = repo_commit
+      env["PLUK_REPO_COMMIT_SHA"] = repo_commit
 
     except Exception as e:
       print(f"No remote repository found in {sys.argv[2]}")
@@ -280,8 +280,8 @@ def main():
   if "PLUK_REPO_URL" in env:
     cmd += ["-e", f"PLUK_REPO_URL={env['PLUK_REPO_URL']}"]
 
-  if "PLUK_REPO_COMMIT" in env:
-    cmd += ["-e", f"PLUK_REPO_COMMIT={env['PLUK_REPO_COMMIT']}"]
+  if "PLUK_REPO_COMMIT_SHA" in env:
+    cmd += ["-e", f"PLUK_REPO_COMMIT_SHA={env['PLUK_REPO_COMMIT_SHA']}"]
 
   cmd += ["cli", "plukd"]
   cmd += sys.argv[1:]
