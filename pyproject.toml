@@ -16,11 +16,13 @@ keywords = ["symbol","search","cli","index","lookup"]
 
 dependencies = [
   "requests>=2.31",
+  "redis>=5.0",
+  "colorama>=0.4"
 ]
 
 [project.optional-dependencies]
-api    = ["fastapi>=0.112", "uvicorn[standard]>=0.30"]
-worker = ["celery>=5.3", "redis>=5.0", "gitpython>=3.1"]
+api    = ["fastapi>=0.116", "uvicorn[standard]>=0.35"]
+worker = ["celery>=5.3", "gitpython>=3.1"]
 db     = ["psycopg[binary,pool]>=3.1"]
 
 [project.scripts]

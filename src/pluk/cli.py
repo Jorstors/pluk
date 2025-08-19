@@ -4,6 +4,8 @@ import argparse
 import sys
 import os
 import time
+from colorama import Fore, Style, init
+init(autoreset=True)
 
 # Initialize a repository
 def cmd_init(args):
@@ -92,7 +94,7 @@ def cmd_search(args):
     This command allows users to find symbols by name, and list its references
     """
     import requests
-    print(f"Searching for symbol: {args.symbol}")
+    print(f"{Fore.CYAN}Searching for symbol: {args.symbol}\n")
     # Make a request to the Pluk API to search for the symbol
     res = requests.get(f"{os.environ.get('PLUK_API_URL')}/search/{args.symbol}")
     if res.status_code == 200:
@@ -101,12 +103,13 @@ def cmd_search(args):
         for symbol in res_obj['symbols'] or []:
             print(f"Found symbol: {symbol['name']}")
             # Location: file:line@commit
-            print(f"Located at: {symbol['location']}@{symbol['commit']}")
-            print("References:")
+            print(f"Located at: {symbol['location']} @ {symbol['commit']}")
             for ref in symbol['references'] or []:
-                print(f" - {ref}")
+                print(f"{Fore.YELLOW}References:")
+                print(f"{Fore.YELLOW} - {ref}")
             if not symbol['references']:
-                print("No references found.")
+                print(f"{Fore.YELLOW} No references found.")
+            print()
         if not res_obj['symbols']:
             print("No symbols found.")
     else:

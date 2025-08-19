@@ -82,8 +82,11 @@ def reindex_repo(repo_url: str, commit_sha: str):
         print(f"Worktree {absolute_repo_worktree_path} already exists, previous worker didn't remove it. Continuing...")
 
       # Run ctags on the repository
+      CTAGS_CMD = [
+        "ctags", "-R", "--output-format=json", "--fields=nFKNSspe", "--sort=no", "--links=no", "--exclude=.git", "--exclude=node_modules", "--exclude=dist", "--exclude=build", "--exclude=venv", "--languages=-Asciidoc,-BibTeX,-Ctags,-DBusIntrospect,-DTD,-Glade,-HTML,-Iniconf,-IPythonCell,-JavaProperties,-JSON,-Markdown,-Man,-PlistXML,-Pod,-QemuHX,-RelaxNG,-ReStructuredText,-SVG,-SystemdUnit,-Tex,-TeXBeamer,-Txt2tags,-XML,-XSLT,-Yaml,-YumRepo,-RpmMacros,-RpmSpec,-Passwd,-WindRes,-FunctionParameters,-PythonLoggingConfig,-R6Class,-S4Class", "-o", "-",
+      ]
       tags_str = subprocess.check_output(
-        ["ctags", "-R", "--fields=nFKNSsp", "--output-format=json", "--sort=no", "--links=no", "--exclude=.git", "--exclude=node_modules", "--exclude=dist", "--exclude=build", "--exclude=venv", "-o", "-"],
+        CTAGS_CMD,
         cwd=absolute_repo_worktree_path,
         text=True
       )
@@ -106,8 +109,9 @@ def reindex_repo(repo_url: str, commit_sha: str):
             cur.execute(insert_symbol, (
               repo_url,
               commit_sha,
-              tag.get("file", "unknown"),
+              tag.get("path", "unknown"),
               tag.get("line", -1),
+              tag.get("end", None),
               tag.get("name", "unknown"),
               tag.get("kind", None),
               tag.get("signature", None),
