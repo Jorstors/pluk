@@ -3,6 +3,17 @@
 import os
 import subprocess
 from celery import Celery
+import json
+from pluk.db import POOL
+from pluk.SQL_UTIL.operations import (
+  create_repos,
+  create_commits,
+  create_symbols,
+  create_idx_symbols_commit_sha_name,
+  insert_repo,
+  insert_commit,
+  insert_symbol
+)
 
 celery = Celery(
   "worker",
@@ -11,20 +22,21 @@ celery = Celery(
 )
 
 @celery.task
-def reindex_repo(repo_url: str, commit: str):
+def reindex_repo(repo_url: str, commit_sha: str):
     """
     Reindex a repository by cloning it, checking out a specific commit sha,
     and then parsing it with u-ctags.
 
     Parsed data is stored in a Postgres database.
     """
-    print(f"Reindexing {repo_url} at {commit}")
+    print(f"Reindexing {repo_url} at {commit_sha}")
     # Clone the repo into var/pluk/repos
     try:
-      repo_name = repo_url.split('/')[-1]                                       # project.git
-      absolute_repo_path = f"/var/pluk/repos/{repo_name}"                       # /var/pluk/repos/project.git
-      absolute_repo_worktree_path = f"{absolute_repo_path}/worktrees/{commit}"  # /var/pluk/repos/project.git/worktree/{commit}
-      absolute_sha_path = f"{absolute_repo_path}/.sha"                          # /var/pluk/repos/project.git/.sha
+      repo_name = repo_url.split('/')[-1]                                                   # project.git
+      absolute_repo_path = f"/var/pluk/repos/{repo_name}"                                   # /var/pluk/repos/project.git
+      relative_repo_worktree_path = f"worktrees/{commit_sha}"                               # worktrees/{commit}
+      absolute_repo_worktree_path = f"{absolute_repo_path}/{relative_repo_worktree_path}"   # /var/pluk/repos/project.git/worktree/{commit}
+      absolute_sha_path = f"{absolute_repo_path}/.sha"                                      # /var/pluk/repos/project.git/.sha
 
       # Read the previous commit SHA if it exists
       prev_commit = None
@@ -48,8 +60,8 @@ def reindex_repo(repo_url: str, commit: str):
           print(f"No changes fetched for {absolute_repo_path}")
 
       # If nothing has changed since the last indexed commit, skip reindexing
-      if os.path.exists(absolute_repo_path) and prev_commit == commit and not has_fetched_changes:
-        print(f"Repository {absolute_repo_path} is already at {commit}, skipping...")
+      if os.path.exists(absolute_repo_path) and prev_commit == commit_sha and not has_fetched_changes:
+        print(f"Repository {absolute_repo_path} is already at {commit_sha}, skipping...")
         return {"status": "FINISHED"}
 
       if not os.path.exists(absolute_repo_path):
@@ -60,15 +72,54 @@ def reindex_repo(repo_url: str, commit: str):
           )
 
       # Makes var/pluk/repos/{repo_name}/worktree
-      print(f"Checking out commit {commit} in {absolute_repo_path}...")
-      subprocess.run(
-        ["git", "-C", absolute_repo_path, "worktree", "add", absolute_repo_worktree_path, commit],
-        check=True
+      print(f"Checking out commit {commit_sha} in {absolute_repo_path}...")
+      if not os.path.exists(absolute_repo_worktree_path):
+        subprocess.run(
+          ["git", "-C", absolute_repo_path, "worktree", "add", relative_repo_worktree_path, commit_sha],
+          check=True
+        )
+      else:
+        print(f"Worktree {absolute_repo_worktree_path} already exists, previous worker didn't remove it. Continuing...")
+
+      # Run ctags on the repository
+      tags_str = subprocess.check_output(
+        ["ctags", "-R", "--fields=nFKNSsp", "--output-format=json", "--sort=no", "--links=no", "--exclude=.git", "--exclude=node_modules", "--exclude=dist", "--exclude=build", "--exclude=venv", "-o", "-"],
+        cwd=absolute_repo_worktree_path,
+        text=True
       )
+      # Parse JSON objects by line
+      print(f"Parsing tags for {repo_url} at {commit_sha}...")
+      tags_obj_array = []
+      for line in tags_str.splitlines():
+          tags_obj_array.append(json.loads(line))
+      print(tags_obj_array)
+
+      with POOL.connection() as conn:
+        with conn.cursor() as cur:
+          # Insert symbols (tags) into the database
+          print(f"Inserting repo {repo_url} into the database...")
+          cur.execute(insert_repo, (repo_url,))
+          print(f"Inserting commit {commit_sha} into the database...")
+          cur.execute(insert_commit, (repo_url, commit_sha, None))
+          print(f"Inserting symbols into the database...")
+          for tag in tags_obj_array:
+            cur.execute(insert_symbol, (
+              repo_url,
+              commit_sha,
+              tag.get("file", "unknown"),
+              tag.get("line", -1),
+              tag.get("name", "unknown"),
+              tag.get("kind", None),
+              tag.get("signature", None),
+              tag.get("scope", None),
+              tag.get("scopeKind", None)
+            ))
+          conn.commit()
+          print(f"Finished inserting symbols for {repo_url} at {commit_sha}")
 
       # Save the current commit SHA
       with open(absolute_sha_path, "w") as f:
-        f.write(commit)
+        f.write(commit_sha)
 
     except subprocess.CalledProcessError as e:
         print(f"Subprocess error: {e}")
@@ -83,10 +134,10 @@ def reindex_repo(repo_url: str, commit: str):
     finally:
       # Removes var/pluk/repos/{repo_name}/{commit}/
       if os.path.exists(absolute_repo_worktree_path):
-        print(f"Removing worktree for {commit} in {absolute_repo_path}...")
+        print(f"Removing worktree for {commit_sha} in {absolute_repo_path}...")
         try:
           subprocess.run(
-              ["git", "-C", absolute_repo_path, "worktree", "remove", absolute_repo_worktree_path, "--force"],
+              ["git", "-C", absolute_repo_path, "worktree", "remove", "--force",  commit_sha],
           )
         except subprocess.CalledProcessError as e:
           print(f"Subprocess error: {e}")

@@ -10,7 +10,7 @@ app = FastAPI()
 
 class ReindexRequest(BaseModel):
     repo_url: str
-    commit: str = "HEAD"
+    commit_sha: str = "HEAD"
 class DiffRequest(BaseModel):
     from_commit: str
     to_commit: str
@@ -38,7 +38,7 @@ def health():
 
 @app.post("/reindex")
 def reindex(request: ReindexRequest):
-    job = reindex_repo.delay(request.repo_url, request.commit)
+    job = reindex_repo.delay(request.repo_url, request.commit_sha)
     if job:
         return JSONResponse(status_code=200, content={"status": "queued", "job_id": job.id})
     return JSONResponse(status_code=500, content={"status": "error", "message": "Failed to enqueue job"})
