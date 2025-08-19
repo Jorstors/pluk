@@ -45,7 +45,7 @@ services:
       PLUK_REDIS_URL: redis://redis:6379/0
     expose:
       - "8000"
-    command: ["uvicorn", "pluk.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    command: /bin/sh -c "python src/pluk/init_db.py && uvicorn pluk.api:app --host 0.0.0.0 --port 8000"
 
   worker:
     image: jorstors/pluk:latest
@@ -63,7 +63,7 @@ services:
       PLUK_REPOS_DIR: /var/pluk/repos
     volumes:
       - pluk_repos:/var/pluk/repos
-    command: ["celery", "-A", "pluk.worker", "worker", "-l", "info"]
+    command: /bin/sh -c "python src/pluk/init_db.py && celery -A pluk.worker worker -l info"
 
   cli:
     image: jorstors/pluk:latest
@@ -162,12 +162,12 @@ def start_pluk_services(home, yml_path):
 
   try:
     # Always pull the latest images before starting
-    # print("Pulling latest Docker images...")
-    # subprocess.run(
-    #   ["docker", "compose", "-f", yml_path, "pull"],
-    #   check=True,
-    #   capture_output=True,
-    # )
+    print("Pulling latest Docker images...")
+    subprocess.run(
+      ["docker", "compose", "-f", yml_path, "pull"],
+      check=True,
+      capture_output=True,
+    )
 
     # Bring up the stack
     print("Starting Pluk services...")

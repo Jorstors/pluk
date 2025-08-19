@@ -3,6 +3,17 @@
 import os
 import subprocess
 from celery import Celery
+import json
+from pluk.db import POOL
+from pluk.SQL_UTIL.operations import (
+  create_repos,
+  create_commits,
+  create_symbols,
+  create_idx_symbols_commit_sha_name,
+  insert_repo,
+  insert_commit,
+  insert_symbol
+)
 
 celery = Celery(
   "worker",
@@ -70,7 +81,41 @@ def reindex_repo(repo_url: str, commit_sha: str):
       else:
         print(f"Worktree {absolute_repo_worktree_path} already exists, previous worker didn't remove it. Continuing...")
 
-      # TODO: Run u-ctags on the worktree
+      # Run ctags on the repository
+      tags_str = subprocess.check_output(
+        ["ctags", "-R", "--fields=nFKNSsp", "--output-format=json", "--sort=no", "--links=no", "--exclude=.git", "--exclude=node_modules", "--exclude=dist", "--exclude=build", "--exclude=venv", "-o", "-"],
+        cwd=absolute_repo_worktree_path,
+        text=True
+      )
+      # Parse JSON objects by line
+      print(f"Parsing tags for {repo_url} at {commit_sha}...")
+      tags_obj_array = []
+      for line in tags_str.splitlines():
+          tags_obj_array.append(json.loads(line))
+      print(tags_obj_array)
+
+      with POOL.connection() as conn:
+        with conn.cursor() as cur:
+          # Insert symbols (tags) into the database
+          print(f"Inserting repo {repo_url} into the database...")
+          cur.execute(insert_repo, (repo_url,))
+          print(f"Inserting commit {commit_sha} into the database...")
+          cur.execute(insert_commit, (repo_url, commit_sha, None))
+          print(f"Inserting symbols into the database...")
+          for tag in tags_obj_array:
+            cur.execute(insert_symbol, (
+              repo_url,
+              commit_sha,
+              tag.get("file", "unknown"),
+              tag.get("line", -1),
+              tag.get("name", "unknown"),
+              tag.get("kind", None),
+              tag.get("signature", None),
+              tag.get("scope", None),
+              tag.get("scopeKind", None)
+            ))
+          conn.commit()
+          print(f"Finished inserting symbols for {repo_url} at {commit_sha}")
 
       # Save the current commit SHA
       with open(absolute_sha_path, "w") as f:
