@@ -61,7 +61,7 @@ pluk cleanup    # stops services (containers stay; fast restart)
 If you want a full teardown (remove containers/network), use:
 
 ```bash
-docker compose -f ~/.pluk/docker-compose.yml down
+docker compose -f ~/.pluk/docker-compose.yml down -v
 ```
 
 ---
