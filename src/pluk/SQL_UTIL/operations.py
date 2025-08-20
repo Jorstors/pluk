@@ -74,7 +74,7 @@ WITH RECURSIVE deps(id) AS (
     AND c.file=p.file
     AND c.scope=p.name
   JOIN deps d ON p.id=d.id
-  WHERE c.repo_url=$1 AND c.commit_sha=$2
+  WHERE c.repo_url=%(repo_url)s AND c.commit_sha=%(commit_sha)s
 )
 SELECT s.file, s.line, s.end_line, s.name, s.kind, s.signature, s.scope, s.scope_kind
 FROM symbols s

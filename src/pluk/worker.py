@@ -83,7 +83,10 @@ def reindex_repo(repo_url: str, commit_sha: str):
 
       # Run ctags on the repository
       CTAGS_CMD = [
-        "ctags", "-R", "--output-format=json", "--fields=nFKNSspe", "--sort=no", "--links=no", "--exclude=.git", "--exclude=node_modules", "--exclude=dist", "--exclude=build", "--exclude=venv", "--languages=-Asciidoc,-BibTeX,-Ctags,-DBusIntrospect,-DTD,-Glade,-HTML,-Iniconf,-IPythonCell,-JavaProperties,-JSON,-Markdown,-Man,-PlistXML,-Pod,-QemuHX,-RelaxNG,-ReStructuredText,-SVG,-SystemdUnit,-Tex,-TeXBeamer,-Txt2tags,-XML,-XSLT,-Yaml,-YumRepo,-RpmMacros,-RpmSpec,-Passwd,-WindRes,-FunctionParameters,-PythonLoggingConfig,-R6Class,-S4Class", "-o", "-",
+        "ctags", "-R", "--output-format=json", "--sort=no", "--links=no",
+        "--exclude=.git", "--exclude=node_modules", "--exclude=dist", "--exclude=build", "--exclude=venv",
+        "--languages=-Asciidoc,-BibTeX,-Ctags,-DBusIntrospect,-DTD,-Glade,-HTML,-Iniconf,-IPythonCell,-JavaProperties,-JSON,-Markdown,-Man,-PlistXML,-Pod,-QemuHX,-RelaxNG,-ReStructuredText,-SVG,-SystemdUnit,-Tex,-TeXBeamer,-Txt2tags,-XML,-XSLT,-Yaml,-YumRepo,-RpmMacros,-RpmSpec,-Passwd,-WindRes,-FunctionParameters,-PythonLoggingConfig,-R6Class,-S4Class",
+        "-o", "-",
       ]
       tags_str = subprocess.check_output(
         CTAGS_CMD,

@@ -65,7 +65,6 @@ def define(symbol: str):
 
 @app.get("/search/{symbol}")
 def search(symbol: str):
-    import ast
     repo_url, commit_sha = get_repo_info()
     if not repo_url or not commit_sha:
         return no_init_response
