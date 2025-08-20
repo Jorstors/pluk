@@ -45,6 +45,8 @@ services:
       PLUK_REDIS_URL: redis://redis:6379/0
     expose:
       - "8000"
+    volumes:
+      - pluk_repos:/var/pluk/repos
     command: /bin/sh -c "python src/pluk/init_db.py && uvicorn pluk.api:app --host 0.0.0.0 --port 8000"
 
   worker:

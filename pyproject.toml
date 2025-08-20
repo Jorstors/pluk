@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-api    = ["fastapi>=0.116", "uvicorn[standard]>=0.35"]
+api    = ["fastapi>=0.116", "uvicorn[standard]>=0.35", "tree_sitter>=0.21", "tree_sitter_languages>=0.21"]
 worker = ["celery>=5.3", "gitpython>=3.1"]
 db     = ["psycopg[binary,pool]>=3.1"]
 

@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS symbols (
   end_line INT,
   name VARCHAR(255) NOT NULL,
   kind VARCHAR(255),
+  language VARCHAR(255),
   signature TEXT,
   scope VARCHAR(255),
   scope_kind VARCHAR(255),
@@ -47,7 +48,8 @@ insert_commit = textwrap.dedent("""
 """)
 
 insert_symbol = textwrap.dedent("""
-  INSERT INTO symbols (repo_url, commit_sha, file, line, end_line, name, kind, signature, scope, scope_kind) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (repo_url, commit_sha, file, line, name) DO NOTHING
+  INSERT INTO symbols (repo_url, commit_sha, file, line, end_line, name, kind, language, signature, scope, scope_kind)
+  VALUES (%(repo_url)s, %(commit_sha)s, %(file)s, %(line)s, %(end_line)s, %(name)s, %(kind)s, %(language)s, %(signature)s, %(scope)s, %(scope_kind)s) ON CONFLICT (repo_url, commit_sha, file, line, name) DO NOTHING
 """)
 
 find_symbols_fuzzy_match = textwrap.dedent("""

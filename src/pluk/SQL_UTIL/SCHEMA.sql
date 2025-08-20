@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS symbols (
   end_line INT,
   name VARCHAR(255) NOT NULL,
   kind VARCHAR(255),
+  language VARCHAR(255),
   signature TEXT,
   scope VARCHAR(255),
   scope_kind VARCHAR(255),
