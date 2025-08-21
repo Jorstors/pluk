@@ -52,6 +52,7 @@ insert_symbol = textwrap.dedent("""
   VALUES (%(repo_url)s, %(commit_sha)s, %(file)s, %(line)s, %(end_line)s, %(name)s, %(kind)s, %(language)s, %(signature)s, %(scope)s, %(scope_kind)s) ON CONFLICT (repo_url, commit_sha, file, line, name) DO NOTHING
 """)
 
+# SQL query for fuzzy matching of symbol names within a specific commit
 find_symbols_fuzzy_match = textwrap.dedent("""
 SELECT file, line, end_line, name, kind, signature, scope, scope_kind
 FROM symbols

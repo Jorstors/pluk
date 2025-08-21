@@ -63,12 +63,17 @@ def define(symbol: str):
 
 @app.get("/search/{symbol}")
 def search(symbol: str):
+    """
+    Fuzzy search for symbols in the current commit.
+    Returns results matching the symbol name across all symbols in the current commit.
+    """
     repo_url, commit_sha = get_repo_info()
     if not repo_url or not commit_sha:
         return no_init_response
     symbols = []
     with POOL.connection() as conn:
         with conn.cursor() as cur:
+            # Perform fuzzy matching for symbol names in the current commit only
             cur.execute(find_symbols_fuzzy_match, params={"repo_url": repo_url, "commit_sha": commit_sha, "symbol": symbol})
             res = cur.fetchall()
             print(f"Search results for {symbol}: {res}")

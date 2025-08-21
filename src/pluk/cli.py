@@ -66,7 +66,7 @@ def cmd_init(args):
             time.sleep(0.1)
 
         sys.stdout.write(f"\r[+] Repository initialized successfully.                                       ")
-        print("\nCurrent repository:")
+        print("\n Current repository:")
         repo_url, commit_sha = get_repo_info()
         print(f" - URL: {repo_url}")
         print(f" - Commit SHA: {commit_sha}")
@@ -104,9 +104,8 @@ def cmd_status(args):
 
 def cmd_search(args):
     """
-    Search for a symbol in the current repository.
-
-    This command allows users to find symbols by name, and list its references
+    Fuzzy search for symbols in the current commit.
+    Returns results matching the symbol name across all symbols in the current commit.
     """
     import requests
     repo_url, commit_sha = get_repo_info()
