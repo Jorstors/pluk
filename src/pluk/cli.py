@@ -5,7 +5,18 @@ import sys
 import os
 import time
 from colorama import Fore, Style, init
+import redis
+
+redis_client = redis.Redis.from_url(os.environ.get("PLUK_REDIS_URL"), decode_responses=True)
+
 init(autoreset=True)
+
+def get_repo_info():
+    repo_url = redis_client.get("repo_url")
+    commit_sha = redis_client.get("commit_sha")
+    if not repo_url or not commit_sha:
+        return None, None
+    return repo_url, commit_sha
 
 # Initialize a repository
 def cmd_init(args):
@@ -55,6 +66,10 @@ def cmd_init(args):
             time.sleep(0.1)
 
         sys.stdout.write(f"\r[+] Repository initialized successfully.                                       ")
+        print("\nCurrent repository:")
+        repo_url, commit_sha = get_repo_info()
+        print(f" - URL: {repo_url}")
+        print(f" - Commit SHA: {commit_sha}")
     else:
         print(f"Error initializing repository: {reindex_res.status_code}")
     return
@@ -94,7 +109,8 @@ def cmd_search(args):
     This command allows users to find symbols by name, and list its references
     """
     import requests
-    print(f"{Fore.CYAN}Searching for symbol: {args.symbol}\n")
+    repo_url, commit_sha = get_repo_info()
+    print(f"{Fore.CYAN}Searching for symbol: {args.symbol} @ {repo_url if repo_url else 'unknown'}:{commit_sha if commit_sha else 'unknown'}\n")
     # Make a request to the Pluk API to search for the symbol
     res = requests.get(f"{os.environ.get('PLUK_API_URL')}/search/{args.symbol}")
     if res.status_code == 200:
@@ -103,12 +119,7 @@ def cmd_search(args):
         for symbol in res_obj['symbols'] or []:
             print(f"Found symbol: {symbol['name']}")
             # Location: file:line@commit
-            print(f"Located at: {symbol['location']} @ {symbol['commit']}")
-            for ref in symbol['references'] or []:
-                print(f"{Fore.YELLOW}References:")
-                print(f"{Fore.YELLOW} - {ref}")
-            if not symbol['references']:
-                print(f"{Fore.YELLOW} No references found.")
+            print(f"Located at: {symbol['location']}")
             print()
         if not res_obj['symbols']:
             print("No symbols found.")

@@ -7,7 +7,7 @@ name = "pluk"
 version = "0.4.0"
 description = "Symbol lookup / search engine CLI"
 readme = "README.md"
-requires-python = ">=3.13.5"
+requires-python = ">=3.11"
 license = "MIT"
 authors = [
   { name = "Justus Jones", email = "Justus1274@gmail.com" }
@@ -21,9 +21,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-api    = ["fastapi>=0.116", "uvicorn[standard]>=0.35", "tree_sitter>=0.21", "tree_sitter_languages>=0.21"]
+api    = ["fastapi>=0.116", "uvicorn[standard]>=0.35"]
 worker = ["celery>=5.3", "gitpython>=3.1"]
 db     = ["psycopg[binary,pool]>=3.1"]
+refs   = ["tree-sitter-language-pack>=0.9.0"]
 
 [project.scripts]
 pluk = "pluk.shim:main"

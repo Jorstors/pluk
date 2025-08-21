@@ -54,8 +54,6 @@ def status(job_id: str):
         return JSONResponse(status_code=200, content={"status": res.status, "result": job_result})
     return JSONResponse(status_code=200, content={"status": res.status})
 
-# === Data base queries ===
-
 @app.get("/define/{symbol}")
 def define(symbol: str):
     repo_url, commit_sha = get_repo_info()
@@ -79,7 +77,6 @@ def search(symbol: str):
                     "name": item['name'],
                     "location": f"{item['file']}:{item['line']}",
                     "commit": commit_sha,
-                    "references": None
                 }
                 symbols.append(symbol_info)
     return JSONResponse(status_code=200, content={"symbols": symbols})

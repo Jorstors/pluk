@@ -75,6 +75,7 @@ services:
         condition: service_started
     environment:
       PLUK_API_URL: http://api:8000
+      PLUK_REDIS_URL: redis://redis:6379/0
       PLUK_REPOS_DIR: /var/pluk/repos
       PYTHONUNBUFFERED: 1
     command: ["sleep", "infinity"]
