@@ -19,7 +19,7 @@ Pluk gives developers “go-to-definition”, “find-all-references”, and “
 - **Impact analysis** (`pluk impact`) to trace downstream dependents
 - **Commit-aware indexing** (`pluk diff`) across Git history
 - **Containerized backend**: PostgreSQL (graph) + Redis (broker/cache)
-- **Strict lifecycle**: `pluk start` is required before any commands
+- **Strict lifecycle**: `pluk start` (host shim) is required before any containerized commands; use the shim on the host to manage services (`start`, `status`, `cleanup`).
 - **Host controls**: `pluk status` to check, `pluk cleanup` to stop services
 
 ---
@@ -38,17 +38,19 @@ pip install pluk
 pluk start
 ```
 
-This creates/updates `~/.pluk/docker-compose.yml`, **pulls latest images**, and brings up: `postgres`, `redis`, `api` (FastAPI), `worker` (Celery), and `cli` (idle exec target). The API stays **internal** to the Docker network.
+This creates/updates `~/.pluk/docker-compose.yml`, **pulls latest images**, and brings up: `postgres`, `redis`, `api` (FastAPI), `worker` (Celery), and `cli` (idle exec target). The API stays **internal** to the Docker network. Note: service lifecycle commands (`start`, `status`, `cleanup`) are implemented in the host shim; run them on your host shell using the `pluk` command.
 
 3. **Index and query**
 
 ```bash
-pluk init /path/to/repo           # queue full index (API→Redis→Celery→Postgres)
-pluk search MyClass               # fuzzy lookup; defs + refs (API→Postgres, cached)
+pluk init /path/to/repo           # queue full index (host shim extracts repo's origin URL and commit and forwards them into the containerized CLI)
+pluk search MyClass               # fuzzy lookup; symbol matches branch-wide (cached)
 pluk define my_function           # show definition (file:line@commit)
-pluk impact computeFoo            # transitive dependents (blast radius; cached)
+pluk impact computeFoo            # direct dependents; blast radius (cached)
 pluk diff symbol abc123 def456    # symbol changes between commits abc123 → def456
 ```
+
+Important: the repository you index must be public (or otherwise directly reachable by the worker container). The worker clones repositories inside the container environment using the repository URL; private repositories that require credentials are not supported by the host shim workflow.
 
 **Note:** CLI commands that poll for job status (like `pluk init`) now display real-time output, thanks to unbuffered Python output in the CLI container.
 

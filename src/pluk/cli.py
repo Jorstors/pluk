@@ -23,11 +23,16 @@ def cmd_init(args):
     """
     Initialize a repository at the specified path.
 
-    This command sets up the necessary structure for Pluk to operate,
-    and is necessary to run before using repository commands.
+    This command queues a full index job for a repository.
 
-    Immediately parses the repository, indexing its contents
-    into the Pluk database.
+    IMPORTANT: the repository to be indexed must be public (or otherwise
+    directly accessible from the worker container). Workers clone repositories
+    using the repository URL; private repositories that require credentials are
+    not supported by the host shim workflow. When `pluk init /path/to/repo` is
+    invoked on the host, the shim extracts the repo's remote URL and commit
+    SHA and forwards them into the CLI container via the environment
+    variables `PLUK_REPO_URL` and `PLUK_REPO_COMMIT_SHA` before asking the
+    API to enqueue the reindex job.
     """
     import requests
     print(f"Initializing repository at {args.path}")
@@ -78,9 +83,9 @@ def cmd_start(args):
     """
     Start the Pluk services.
 
-    This command starts all the required Docker containers for Pluk,
-    including the database, worker, and API services.
-    It will create the necessary Docker Compose configuration if it doesn't exist.
+    NOTE: Starting/stopping/status commands are handled by the host shim (`pluk`)
+    and affect Docker Compose on the host. Invoking `start` inside the CLI
+    container (`plukd`) is a no-op; use the host shim command `pluk start`.
     """
     return
 
@@ -88,8 +93,9 @@ def cmd_cleanup(args):
     """
     Stop the Pluk services.
 
-    This command stops all running Pluk Docker containers,
-    but does not remove data volumes.
+    NOTE: This is a host-level command handled by the shim (`pluk`). Use
+    `pluk cleanup` on the host to stop the Docker Compose stack. Running this
+    inside the CLI container does not perform host-level cleanup.
     """
     return
 
@@ -97,15 +103,16 @@ def cmd_status(args):
     """
     Check the status of Pluk services.
 
-    This command checks if all required Pluk services are running
-    and reports their current status.
+    NOTE: Service lifecycle commands (`start`, `status`, `cleanup`) are
+    implemented in the host shim. Use `pluk status` on the host to inspect the
+    current Docker Compose state.
     """
     return
 
 def cmd_search(args):
     """
-    Fuzzy search for symbols in the current commit.
-    Returns results matching the symbol name across all symbols in the current commit.
+    Fuzzy search for symbols in the current indexed commit. Uses the
+    repository currently registered with the service (see `pluk init`).
     """
     import requests
     repo_url, commit_sha = get_repo_info()
@@ -124,8 +131,8 @@ def cmd_search(args):
             print("No symbols found.")
     else:
         print(f"Error searching for symbol: {res.status_code}")
-        print("     Please check to make sure you are indexing a public Git repository.")
-        print("     Also, ensure your latest changes are pushed to 'origin' so they are available for search.")
+        print("     Please ensure the repository indexed is public and reachable by the worker container.")
+        print("     Also ensure your latest changes are pushed to 'origin' so they are available for search.")
 
 def cmd_define(args):
     """
@@ -154,11 +161,10 @@ def cmd_impact(args):
     """
     Analyze the impact of a symbol in the codebase.
 
-    Shows everything that depends on the symbol, transitively.
-    Starts with direct callers/users, then expands to callers of those callers,
-    importers of importers, subclass chains, etc.
-
-    Scope: transitive closure over the dependency graph (calls/imports/inheritance).
+    Shows everything that depends on the symbol in the current repository.
+    This command allows users to understand the potential impact of
+    changes to a symbol by listing all symbols, including their
+    files and lines, that reference it.
     """
     import requests
     print(f"Analyzing impact of symbol: {args.symbol}")
