@@ -54,11 +54,18 @@ insert_symbol = textwrap.dedent("""
 
 # SQL query for fuzzy matching of symbol names within a specific commit
 find_symbols_fuzzy_match = textwrap.dedent("""
-SELECT file, line, end_line, name, kind, signature, scope, scope_kind
+SELECT file, line, end_line, name, kind, language, signature, scope, scope_kind
 FROM symbols
 WHERE repo_url = %(repo_url)s AND commit_sha = %(commit_sha)s AND name ILIKE '%%' || %(symbol)s || '%%'
 ORDER BY (name ILIKE %(symbol)s) DESC, LENGTH(name), file, line
 LIMIT 50;
+""")
+
+find_exact_symbol = textwrap.dedent("""
+SELECT file, line, end_line, name, kind, language, signature, scope, scope_kind
+FROM symbols
+WHERE repo_url = %(repo_url)s AND commit_sha = %(commit_sha)s AND name = %(name)s
+LIMIT 1;
 """)
 
 find_scope_dependencies = textwrap.dedent("""

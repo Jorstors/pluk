@@ -9,7 +9,13 @@ import redis
 from pluk.db import POOL
 from pluk.SQL_UTIL.operations import (
     find_symbols_fuzzy_match,
+    find_exact_symbol,
     find_scope_dependencies
+)
+from pluk.refs_ts import (
+    git_grep_files,
+    find_refs,
+    CTAGS_TO_TREE_SITTER_MAP
 )
 
 app = FastAPI()
@@ -59,7 +65,7 @@ def define(symbol: str):
     repo_url, commit_sha = get_repo_info()
     if not repo_url or not commit_sha:
         return no_init_response
-    return JSONResponse(status_code=200, content={"definition": symbol, "location": "file:line", "commit": "abc123"})
+    return JSONResponse(status_code=200, content={"definition": symbol, "location": "file:line"})
 
 @app.get("/search/{symbol}")
 def search(symbol: str):
@@ -91,7 +97,57 @@ def impact(symbol: str):
     repo_url, commit_sha = get_repo_info()
     if not repo_url or not commit_sha:
         return no_init_response
-    return JSONResponse(status_code=200, content={"impacted_files": ["file1.py", "file2.py"]})
+
+    symbol_info = {}
+
+    # Query symbol info from Postgres
+    with POOL.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(find_exact_symbol, params={"repo_url": repo_url, "commit_sha": commit_sha, "name": symbol})
+            found_symbol = cur.fetchone()
+            if found_symbol:
+                symbol_info = {
+                    "file": found_symbol["file"],
+                    "line": found_symbol["line"],
+                    "end_line": found_symbol.get("end_line"),
+                    "name": found_symbol["name"],
+                    "kind": found_symbol.get("kind"),
+                    "language": found_symbol.get("language"),
+                    "signature": found_symbol.get("signature"),
+                    "scope": found_symbol.get("scope"),
+                    "scope_kind": found_symbol.get("scope_kind"),
+                }
+            else:
+                return JSONResponse(status_code=404, content={"status": "error", "message": "Symbol not found"})
+
+    name = symbol_info.get("name")
+    file = symbol_info.get("file")
+    line = symbol_info.get("line")
+    language = symbol_info.get("language")
+
+    print(f"Found symbol: {name}, {file}:{line}, Language: {language}")
+
+    # Map language to tree-sitter key
+    lang_key = CTAGS_TO_TREE_SITTER_MAP.get(language)
+    if not lang_key:
+        return JSONResponse(status_code=406, content={"status": "error", "message": "Unsupported language"})
+
+    impacted_files = []
+    repo_name = repo_url.split('/')[-1]
+    abs_mirror_directory = f"/var/pluk/repos/{repo_name}"
+
+    # Check if worktree exists
+    if not os.path.exists(abs_mirror_directory):
+        return JSONResponse(status_code=505, content={"status": "error", "message": "Worktree not found"})
+
+    # Find symbol occurrences in files
+    symbol_occurrences = git_grep_files(abs_mirror_directory, commit_sha, symbol)
+    if symbol_occurrences:
+        impacted_files = find_refs(abs_mirror_directory, commit_sha, symbol, lang_key, symbol_occurrences)
+    else:
+        return JSONResponse(status_code=200, content={"impacted_files": impacted_files})
+
+    return JSONResponse(status_code=200, content={"impacted_files": impacted_files})
 
 @app.get("/diff/{symbol}/{from_commit}/{to_commit}")
 def diff(symbol: str, from_commit: str, to_commit: str):

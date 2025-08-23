@@ -136,14 +136,15 @@ def cmd_define(args):
     """
     import requests
     print(f"Defining symbol: {args.symbol}")
+    print()
     # Make a request to the Pluk API to define the symbol
     # API returns the symbol definition and its location
     res = requests.get(f"{os.environ.get('PLUK_API_URL')}/define/{args.symbol}")
     if res.status_code == 200:
         res_obj = res.json()
         print(f"Symbol definition: {res_obj['definition']}")
-        # Location: file:line@commit
-        print(f"Located at: {res_obj['location']}@{res_obj['commit']}")
+        # Location: file:line
+        print(f"Located at: {res_obj['location']}")
     else:
         print(f"Error defining symbol: {res.status_code}")
 
@@ -169,8 +170,15 @@ def cmd_impact(args):
             print(f" - {file}")
         if not res_obj['impacted_files']:
             print("No impacted files found.")
+    elif res.status_code == 404:
+        print("Symbol not found.")
+    elif res.status_code == 405:
+        print("Language not supported.")
+        print("Please refer to the documentation for supported languages.")
+    elif res.status_code == 500:
+        print("Repository not initialized.")
     else:
-        print(f"Error analyzing impact: {res.status_code}")
+        print(f"Internal server error: {res.status_code}")
 
 def cmd_diff(args):
     """

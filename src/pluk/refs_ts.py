@@ -1,5 +1,6 @@
 # refs_ts.py
 import subprocess
+import tree_sitter as ts
 from tree_sitter_language_pack import get_language, get_parser # type: ignore
 
 CTAGS_TO_TREE_SITTER_MAP = {"Python":"python",
@@ -39,6 +40,7 @@ def git_grep_files(mirror, commit, name):
 
 # Show the contents of a file at a specific commit in bytes
 def extract_file_from_commit(mirror, commit, path):
+    print("[extract_file_from_commit] Extracting file from commit...")
     return subprocess.check_output(["git","-C",mirror,"show",f"{commit}:{path}"])
 
 # Find the nearest container (function/class) for a given node
@@ -58,25 +60,56 @@ def locate_parent_container(lang_key, node):
         cur=cur.parent
     return None
 
-# Find references to a symbol in a set of files
-def find_refs(mirror, commit, name, lang_key, files):
+LANG = {}
+PARSER = {}
+QUERY = {}
+
+# Cache builds for reuse
+def ensure_lang_ready(lang_key):
+    if lang_key in LANG:
+        return
     lang = get_language(lang_key)
     parser = get_parser(lang_key)
-    query  = lang.query(QUERIES[lang_key])
+    query = ts.Query(lang, QUERIES[lang_key])
+
+    LANG[lang_key] = lang
+    PARSER[lang_key] = parser
+    QUERY[lang_key] = query
+
+# Find references to a symbol in a set of files
+def find_refs(mirror, commit, name, lang_key, files):
+    ensure_lang_ready(lang_key)
+    lang   = LANG[lang_key]
+    parser = PARSER[lang_key]
+    query  = QUERY[lang_key]
+
     references_list = []
     for path in files:
-        try: src = extract_file_from_commit(mirror, commit, path)
-        except subprocess.CalledProcessError: continue
+        try:
+            src = extract_file_from_commit(mirror, commit, path)
+        except subprocess.CalledProcessError:
+            continue
+
         tree = parser.parse(src)
-        for node,_ in query.captures(tree.root_node):
-            s,e = node.start_byte, node.end_byte
-            captured = src[s:e].decode("utf-8","replace")
-            if captured != name: continue
-            line = node.start_point[0]+1 # Increment zero based line numbers
+        cursor = ts.QueryCursor(query)
+        capdict = cursor.captures(tree.root_node)
+        for node in capdict.get("id", []):
+            print(f"Found node: {node.type} at {node.start_point} to {node.end_point}")
+            s, e = node.start_byte, node.end_byte
+            captured = src[s:e].decode("utf-8", "replace")
+
+            if captured != name:
+                continue
+
+            line = node.start_point[0] + 1
             cont_node = locate_parent_container(lang_key, node)
-            references_list.append({"file":path,"line":line,
+
+            reference = {"file": path, "line": line,
                         "container": cont_node.text.decode() if cont_node else None,
-                        "container_kind": cont_node.type if cont_node else None})
+                        "container_kind": cont_node.type if cont_node else None}
+            print(f"[find_refs] Found reference: {reference}")
+
+            references_list.append(reference)
 
     # de-dupe by (file,line) tuples as key to references
     return list({(reference["file"],reference["line"]): reference for reference in references_list}.values())
