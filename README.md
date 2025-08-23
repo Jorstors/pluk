@@ -14,7 +14,8 @@ Pluk gives developers “go-to-definition”, “find-all-references”, and “
 
 ## Key Features
 
-- **Symbol search** (`pluk search`) and definition lookup (`pluk define`)
+- **Fuzzy symbol search** (`pluk search`) for finding symbols in the current commit
+- **Definition lookup** (`pluk define`)
 - **Impact analysis** (`pluk impact`) to trace downstream dependents
 - **Commit-aware indexing** (`pluk diff`) across Git history
 - **Containerized backend**: PostgreSQL (graph) + Redis (broker/cache)

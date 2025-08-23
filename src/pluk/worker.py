@@ -82,8 +82,14 @@ def reindex_repo(repo_url: str, commit_sha: str):
         print(f"Worktree {absolute_repo_worktree_path} already exists, previous worker didn't remove it. Continuing...")
 
       # Run ctags on the repository
+      CTAGS_CMD = [
+        "ctags", "-R", "--fields-all=*", "--output-format=json", "--sort=no", "--links=no",
+        "--exclude=.git", "--exclude=node_modules", "--exclude=dist", "--exclude=build", "--exclude=venv",
+        "--languages=-Asciidoc,-BibTeX,-Ctags,-DBusIntrospect,-DTD,-Glade,-HTML,-Iniconf,-IPythonCell,-JavaProperties,-JSON,-Markdown,-Man,-PlistXML,-Pod,-QemuHX,-RelaxNG,-ReStructuredText,-SVG,-SystemdUnit,-Tex,-TeXBeamer,-Txt2tags,-XML,-XSLT,-Yaml,-YumRepo,-RpmMacros,-RpmSpec,-Passwd,-WindRes,-FunctionParameters,-PythonLoggingConfig,-R6Class,-S4Class",
+        "-o", "-"
+      ]
       tags_str = subprocess.check_output(
-        ["ctags", "-R", "--fields=nFKNSsp", "--output-format=json", "--sort=no", "--links=no", "--exclude=.git", "--exclude=node_modules", "--exclude=dist", "--exclude=build", "--exclude=venv", "-o", "-"],
+        CTAGS_CMD,
         cwd=absolute_repo_worktree_path,
         text=True
       )
@@ -103,17 +109,19 @@ def reindex_repo(repo_url: str, commit_sha: str):
           cur.execute(insert_commit, (repo_url, commit_sha, None))
           print(f"Inserting symbols into the database...")
           for tag in tags_obj_array:
-            cur.execute(insert_symbol, (
-              repo_url,
-              commit_sha,
-              tag.get("file", "unknown"),
-              tag.get("line", -1),
-              tag.get("name", "unknown"),
-              tag.get("kind", None),
-              tag.get("signature", None),
-              tag.get("scope", None),
-              tag.get("scopeKind", None)
-            ))
+            cur.execute(insert_symbol, params={
+              "repo_url": repo_url,
+              "commit_sha": commit_sha,
+              "file": tag.get("path", "unknown"),
+              "line": tag.get("line", -1),
+              "end_line": tag.get("end", None),
+              "name": tag.get("name", "unknown"),
+              "kind": tag.get("kind", None),
+              "language": tag.get("language", None),
+              "signature": tag.get("signature", None),
+              "scope": tag.get("scope", None),
+              "scope_kind": tag.get("scopeKind", None)
+            })
           conn.commit()
           print(f"Finished inserting symbols for {repo_url} at {commit_sha}")
 

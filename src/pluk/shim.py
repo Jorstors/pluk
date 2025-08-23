@@ -45,6 +45,8 @@ services:
       PLUK_REDIS_URL: redis://redis:6379/0
     expose:
       - "8000"
+    volumes:
+      - pluk_repos:/var/pluk/repos
     command: /bin/sh -c "python src/pluk/init_db.py && uvicorn pluk.api:app --host 0.0.0.0 --port 8000"
 
   worker:
@@ -73,6 +75,7 @@ services:
         condition: service_started
     environment:
       PLUK_API_URL: http://api:8000
+      PLUK_REDIS_URL: redis://redis:6379/0
       PLUK_REPOS_DIR: /var/pluk/repos
       PYTHONUNBUFFERED: 1
     command: ["sleep", "infinity"]
@@ -162,12 +165,12 @@ def start_pluk_services(home, yml_path):
 
   try:
     # Always pull the latest images before starting
-    print("Pulling latest Docker images...")
-    subprocess.run(
-      ["docker", "compose", "-f", yml_path, "pull"],
-      check=True,
-      capture_output=True,
-    )
+    # print("Pulling latest Docker images...")
+    # subprocess.run(
+    #   ["docker", "compose", "-f", yml_path, "pull"],
+    #   check=True,
+    #   capture_output=True,
+    # )
 
     # Bring up the stack
     print("Starting Pluk services...")

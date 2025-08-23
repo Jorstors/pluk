@@ -4,6 +4,19 @@ import argparse
 import sys
 import os
 import time
+from colorama import Fore, Style, init
+import redis
+
+redis_client = redis.Redis.from_url(os.environ.get("PLUK_REDIS_URL"), decode_responses=True)
+
+init(autoreset=True)
+
+def get_repo_info():
+    repo_url = redis_client.get("repo_url")
+    commit_sha = redis_client.get("commit_sha")
+    if not repo_url or not commit_sha:
+        return None, None
+    return repo_url, commit_sha
 
 # Initialize a repository
 def cmd_init(args):
@@ -53,6 +66,10 @@ def cmd_init(args):
             time.sleep(0.1)
 
         sys.stdout.write(f"\r[+] Repository initialized successfully.                                       ")
+        print("\nCurrent repository:")
+        repo_url, commit_sha = get_repo_info()
+        print(f"    URL: {repo_url}")
+        print(f"    Commit SHA: {commit_sha}")
     else:
         print(f"Error initializing repository: {reindex_res.status_code}")
     return
@@ -87,12 +104,12 @@ def cmd_status(args):
 
 def cmd_search(args):
     """
-    Search for a symbol in the current repository.
-
-    This command allows users to find symbols by name, and list its references
+    Fuzzy search for symbols in the current commit.
+    Returns results matching the symbol name across all symbols in the current commit.
     """
     import requests
-    print(f"Searching for symbol: {args.symbol}")
+    repo_url, commit_sha = get_repo_info()
+    print(f"{Fore.CYAN}Searching for symbol: {args.symbol} @ {repo_url if repo_url else 'unknown'}:{commit_sha if commit_sha else 'unknown'}\n")
     # Make a request to the Pluk API to search for the symbol
     res = requests.get(f"{os.environ.get('PLUK_API_URL')}/search/{args.symbol}")
     if res.status_code == 200:
@@ -101,16 +118,14 @@ def cmd_search(args):
         for symbol in res_obj['symbols'] or []:
             print(f"Found symbol: {symbol['name']}")
             # Location: file:line@commit
-            print(f"Located at: {symbol['location']}@{symbol['commit']}")
-            print("References:")
-            for ref in symbol['references'] or []:
-                print(f" - {ref}")
-            if not symbol['references']:
-                print("No references found.")
+            print(f"Located at: {symbol['location']}")
+            print()
         if not res_obj['symbols']:
             print("No symbols found.")
     else:
         print(f"Error searching for symbol: {res.status_code}")
+        print("     Please check to make sure you are indexing a public Git repository.")
+        print("     Also, ensure your latest changes are pushed to 'origin' so they are available for search.")
 
 def cmd_define(args):
     """
@@ -123,14 +138,15 @@ def cmd_define(args):
     """
     import requests
     print(f"Defining symbol: {args.symbol}")
+    print()
     # Make a request to the Pluk API to define the symbol
     # API returns the symbol definition and its location
     res = requests.get(f"{os.environ.get('PLUK_API_URL')}/define/{args.symbol}")
     if res.status_code == 200:
         res_obj = res.json()
         print(f"Symbol definition: {res_obj['definition']}")
-        # Location: file:line@commit
-        print(f"Located at: {res_obj['location']}@{res_obj['commit']}")
+        # Location: file:line
+        print(f"Located at: {res_obj['location']}")
     else:
         print(f"Error defining symbol: {res.status_code}")
 
@@ -151,13 +167,24 @@ def cmd_impact(args):
     if res.status_code == 200:
         res_obj = res.json()
         # Process the response JSON and list impacted files
-        print("Impacted files:")
-        for file in res_obj['impacted_files'] or []:
-            print(f" - {file}")
-        if not res_obj['impacted_files']:
-            print("No impacted files found.")
+        # Outputs formatted: {"file": path, "line": line,
+                            # "container": cont_node.text.decode() if cont_node else None,
+                            # "container_kind": cont_node.type if cont_node else None}
+        print("References found:")
+        for ref in res_obj['symbol_references'] or []:
+            print(f" - {ref.get('container', '<scope unknown>')} ({ref.get('container_kind', '<kind unknown>')}) in {ref.get('file', '<file unknown>')}:{ref.get('line', '<line unknown>')}")
+            print()
+        if not res_obj['symbol_references']:
+            print("No symbol references found.")
+    elif res.status_code == 404:
+        print("Symbol not found.")
+    elif res.status_code == 405:
+        print("Language not supported.")
+        print("Please refer to the documentation for supported languages.")
+    elif res.status_code == 500:
+        print("Repository not initialized.")
     else:
-        print(f"Error analyzing impact: {res.status_code}")
+        print(f"Internal server error: {res.status_code}")
 
 def cmd_diff(args):
     """
