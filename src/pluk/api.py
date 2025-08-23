@@ -132,7 +132,7 @@ def impact(symbol: str):
     if not lang_key:
         return JSONResponse(status_code=406, content={"status": "error", "message": "Unsupported language"})
 
-    impacted_files = []
+    symbol_references = []
     repo_name = repo_url.split('/')[-1]
     abs_mirror_directory = f"/var/pluk/repos/{repo_name}"
 
@@ -143,11 +143,11 @@ def impact(symbol: str):
     # Find symbol occurrences in files
     symbol_occurrences = git_grep_files(abs_mirror_directory, commit_sha, symbol)
     if symbol_occurrences:
-        impacted_files = find_refs(abs_mirror_directory, commit_sha, symbol, lang_key, symbol_occurrences)
+        symbol_references = find_refs(abs_mirror_directory, commit_sha, symbol, lang_key, symbol_occurrences)
     else:
-        return JSONResponse(status_code=200, content={"impacted_files": impacted_files})
+        return JSONResponse(status_code=200, content={"symbol_references": symbol_references})
 
-    return JSONResponse(status_code=200, content={"impacted_files": impacted_files})
+    return JSONResponse(status_code=200, content={"symbol_references": symbol_references})
 
 @app.get("/diff/{symbol}/{from_commit}/{to_commit}")
 def diff(symbol: str, from_commit: str, to_commit: str):

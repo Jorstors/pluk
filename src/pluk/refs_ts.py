@@ -102,14 +102,20 @@ def find_refs(mirror, commit, name, lang_key, files):
                 continue
 
             line = node.start_point[0] + 1
+
             cont_node = locate_parent_container(lang_key, node)
+            container_name = None
+
+            name_node = cont_node.child_by_field_name("name") if cont_node else None
+            if name_node:
+                container_name = src[name_node.start_byte:name_node.end_byte].decode("utf-8", "replace")
+            print(f"Located container: {container_name} of type {cont_node.type if cont_node else None}")
 
             reference = {"file": path, "line": line,
-                        "container": cont_node.text.decode() if cont_node else None,
+                        "container": container_name,
                         "container_kind": cont_node.type if cont_node else None}
             print(f"[find_refs] Found reference: {reference}")
 
             references_list.append(reference)
 
-    # de-dupe by (file,line) tuples as key to references
-    return list({(reference["file"],reference["line"]): reference for reference in references_list}.values())
+    return references_list

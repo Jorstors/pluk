@@ -66,10 +66,10 @@ def cmd_init(args):
             time.sleep(0.1)
 
         sys.stdout.write(f"\r[+] Repository initialized successfully.                                       ")
-        print("\n Current repository:")
+        print("\nCurrent repository:")
         repo_url, commit_sha = get_repo_info()
-        print(f" - URL: {repo_url}")
-        print(f" - Commit SHA: {commit_sha}")
+        print(f"    URL: {repo_url}")
+        print(f"    Commit SHA: {commit_sha}")
     else:
         print(f"Error initializing repository: {reindex_res.status_code}")
     return
@@ -124,6 +124,8 @@ def cmd_search(args):
             print("No symbols found.")
     else:
         print(f"Error searching for symbol: {res.status_code}")
+        print("     Please check to make sure you are indexing a public Git repository.")
+        print("     Also, ensure your latest changes are pushed to 'origin' so they are available for search.")
 
 def cmd_define(args):
     """
@@ -165,11 +167,15 @@ def cmd_impact(args):
     if res.status_code == 200:
         res_obj = res.json()
         # Process the response JSON and list impacted files
-        print("Impacted files:")
-        for file in res_obj['impacted_files'] or []:
-            print(f" - {file}")
-        if not res_obj['impacted_files']:
-            print("No impacted files found.")
+        # Outputs formatted: {"file": path, "line": line,
+                            # "container": cont_node.text.decode() if cont_node else None,
+                            # "container_kind": cont_node.type if cont_node else None}
+        print("References found:")
+        for ref in res_obj['symbol_references'] or []:
+            print(f" - {ref.get('container', '<scope unknown>')} ({ref.get('container_kind', '<kind unknown>')}) in {ref.get('file', '<file unknown>')}:{ref.get('line', '<line unknown>')}")
+            print()
+        if not res_obj['symbol_references']:
+            print("No symbol references found.")
     elif res.status_code == 404:
         print("Symbol not found.")
     elif res.status_code == 405:
