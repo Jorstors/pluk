@@ -1,6 +1,6 @@
 # tests/test_cli_required_args.py
 
-import os, sys, pytest
+import os, pytest
 
 os.environ.setdefault("PLUK_REDIS_URL", "redis://localhost:6379/0")
 from pluk import cli
