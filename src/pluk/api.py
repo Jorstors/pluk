@@ -80,7 +80,33 @@ def status(job_id: str):
 
 
 @app.get("/define/{symbol}")
-def define(symbol: str):
+def define(symbol: str) -> JSONResponse:
+    return define_logic(symbol)
+
+
+@app.get("/search/{symbol}")
+def search(symbol: str) -> JSONResponse:
+    """
+    Fuzzy search for symbols in the current commit.
+    Returns results matching the symbol name across all symbols in the current commit.
+    """
+    return search_logic(symbol)
+
+
+@app.get("/impact/{symbol}")
+def impact(symbol: str) -> JSONResponse:
+    return impact_logic(symbol)
+
+
+@app.get("/diff/{symbol}/{from_commit}/{to_commit}")
+def diff(symbol: str, from_commit: str, to_commit: str):
+    repo_url, commit_sha = get_repo_info()
+    if not repo_url or not commit_sha:
+        return no_init_response
+    return JSONResponse(status_code=200, content={"differences": ["diff1", "diff2"]})
+
+
+def define_logic(symbol: str):
     repo_url, commit_sha = get_repo_info()
     if not repo_url or not commit_sha:
         return no_init_response
@@ -115,12 +141,7 @@ def define(symbol: str):
             return JSONResponse(status_code=200, content={"symbol": symbol_info})
 
 
-@app.get("/search/{symbol}")
-def search(symbol: str):
-    """
-    Fuzzy search for symbols in the current commit.
-    Returns results matching the symbol name across all symbols in the current commit.
-    """
+def search_logic(symbol: str):
     repo_url, commit_sha = get_repo_info()
     if not repo_url or not commit_sha:
         return no_init_response
@@ -148,8 +169,7 @@ def search(symbol: str):
     return JSONResponse(status_code=200, content={"symbols": symbols})
 
 
-@app.get("/impact/{symbol}")
-def impact(symbol: str):
+def impact_logic(symbol: str):
     repo_url, commit_sha = get_repo_info()
     if not repo_url or not commit_sha:
         return no_init_response
@@ -222,11 +242,3 @@ def impact(symbol: str):
     return JSONResponse(
         status_code=200, content={"symbol_references": symbol_references}
     )
-
-
-@app.get("/diff/{symbol}/{from_commit}/{to_commit}")
-def diff(symbol: str, from_commit: str, to_commit: str):
-    repo_url, commit_sha = get_repo_info()
-    if not repo_url or not commit_sha:
-        return no_init_response
-    return JSONResponse(status_code=200, content={"differences": ["diff1", "diff2"]})
