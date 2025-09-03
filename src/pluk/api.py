@@ -84,9 +84,35 @@ def define(symbol: str):
     repo_url, commit_sha = get_repo_info()
     if not repo_url or not commit_sha:
         return no_init_response
-    return JSONResponse(
-        status_code=200, content={"definition": symbol, "location": "file:line"}
-    )
+    symbol_info = {}
+    with POOL.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                find_exact_symbol,
+                params={
+                    "repo_url": repo_url,
+                    "commit_sha": commit_sha,
+                    "name": symbol,
+                },
+            )
+            found_symbol = cur.fetchone()
+            if not found_symbol:
+                return JSONResponse(
+                    status_code=404,
+                    content={"status": "error", "message": "Symbol not found"},
+                )
+            symbol_info = {
+                "file": found_symbol["file"],
+                "line": found_symbol["line"],
+                "end_line": found_symbol.get("end_line"),
+                "name": found_symbol["name"],
+                "kind": found_symbol.get("kind"),
+                "language": found_symbol.get("language"),
+                "signature": found_symbol.get("signature"),
+                "scope": found_symbol.get("scope"),
+                "scope_kind": found_symbol.get("scope_kind"),
+            }
+            return JSONResponse(status_code=200, content={"symbol": symbol_info})
 
 
 @app.get("/search/{symbol}")

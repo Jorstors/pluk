@@ -174,10 +174,29 @@ def cmd_define(args):
     # API returns the symbol definition and its location
     res = requests.get(f"{os.environ.get('PLUK_API_URL')}/define/{args.symbol}")
     if res.status_code == 200:
-        res_obj = res.json()
-        print(f"Symbol definition: {res_obj['definition']}")
-        # Location: file:line
-        print(f"Located at: {res_obj['location']}")
+        symbol_info_res = res.json()["symbol"]
+        file, line, end_line, name, kind, language, signature, scope, scope_kind = (
+            symbol_info_res.get("file", "unknown"),
+            symbol_info_res.get("line", -1),
+            symbol_info_res.get("end_line", None),
+            symbol_info_res.get("name", "unknown"),
+            symbol_info_res.get("kind", None),
+            symbol_info_res.get("language", None),
+            symbol_info_res.get("signature", None),
+            symbol_info_res.get("scope", None),
+            symbol_info_res.get("scope_kind", None),
+        )
+        print(f"Symbol: {args.symbol}")
+        print(f" Location: {file}:{line}{f'-{end_line}' if end_line else ''}")
+        print(f" Kind: {kind if kind else 'unknown'}")
+        print(f" Language: {language if language else 'unknown'}")
+        print(f" Signature: {signature if signature else 'unknown'}")
+        print(
+            f" Scope: {scope if scope else 'global'} ({scope_kind if scope_kind else 'unknown'})"
+        )
+        print()
+    elif res.status_code == 404:
+        print("Symbol not found.")
     else:
         print(f"Error defining symbol: {res.status_code}")
 
