@@ -7,9 +7,12 @@ import time
 from colorama import Fore, Style, init
 import redis
 
-redis_client = redis.Redis.from_url(os.environ.get("PLUK_REDIS_URL"), decode_responses=True)
+redis_client = redis.Redis.from_url(
+    os.environ.get("PLUK_REDIS_URL"), decode_responses=True
+)
 
 init(autoreset=True)
+
 
 def get_repo_info():
     repo_url = redis_client.get("repo_url")
@@ -17,6 +20,7 @@ def get_repo_info():
     if not repo_url or not commit_sha:
         return None, None
     return repo_url, commit_sha
+
 
 # Initialize a repository
 def cmd_init(args):
@@ -35,32 +39,37 @@ def cmd_init(args):
     API to enqueue the reindex job.
     """
     import requests
+
     print(f"Initializing repository at {args.path}")
     # Grab repo information to send to the API
     repo_url = os.environ.get("PLUK_REPO_URL")
     repo_commit_sha = os.environ.get("PLUK_REPO_COMMIT_SHA")
     # Make a request to the Pluk API to initialize the repository
-    reindex_res = requests.post(f"{os.environ.get('PLUK_API_URL')}/reindex/", json={
-        "repo_url": repo_url,
-        "commit_sha": repo_commit_sha
-    })
+    reindex_res = requests.post(
+        f"{os.environ.get('PLUK_API_URL')}/reindex/",
+        json={"repo_url": repo_url, "commit_sha": repo_commit_sha},
+    )
     if reindex_res.status_code == 200:
         sys.stdout.write("[+] Indexing started...")
-        job_id = reindex_res.json()['job_id']
+        job_id = reindex_res.json()["job_id"]
         # Check job status
         start_time = time.perf_counter()
         while True:
             elapsed_time = time.perf_counter() - start_time
-            job_status_res = requests.get(f"{os.environ.get('PLUK_API_URL')}/status/{job_id}")
+            job_status_res = requests.get(
+                f"{os.environ.get('PLUK_API_URL')}/status/{job_id}"
+            )
             if job_status_res.status_code == 200:
                 res_obj = job_status_res.json()
-                status = res_obj['status']
+                status = res_obj["status"]
                 if status == "SUCCESS":
-                    job_result = res_obj['result']
-                    if job_result['status'] == "FINISHED":
+                    job_result = res_obj["result"]
+                    if job_result["status"] == "FINISHED":
                         break
-                    elif job_result['status'] == "ERROR":
-                        print(f"\n[/] Error initializing repository: {job_result['error_message']}")
+                    elif job_result["status"] == "ERROR":
+                        print(
+                            f"\n[/] Error initializing repository: {job_result['error_message']}"
+                        )
                         return
                 elif status == "FAILURE":
                     print(f"\n[/] Failed to initialize repository: {status}")
@@ -70,7 +79,9 @@ def cmd_init(args):
                 sys.stdout.flush()
             time.sleep(0.1)
 
-        sys.stdout.write(f"\r[+] Repository initialized successfully.                                       ")
+        sys.stdout.write(
+            f"\r[+] Repository initialized successfully.                                       "
+        )
         print("\nCurrent repository:")
         repo_url, commit_sha = get_repo_info()
         print(f"    URL: {repo_url}")
@@ -78,6 +89,7 @@ def cmd_init(args):
     else:
         print(f"Error initializing repository: {reindex_res.status_code}")
     return
+
 
 def cmd_start(args):
     """
@@ -89,6 +101,7 @@ def cmd_start(args):
     """
     return
 
+
 def cmd_cleanup(args):
     """
     Stop the Pluk services.
@@ -98,6 +111,7 @@ def cmd_cleanup(args):
     inside the CLI container does not perform host-level cleanup.
     """
     return
+
 
 def cmd_status(args):
     """
@@ -109,30 +123,39 @@ def cmd_status(args):
     """
     return
 
+
 def cmd_search(args):
     """
     Fuzzy search for symbols in the current indexed commit. Uses the
     repository currently registered with the service (see `pluk init`).
     """
     import requests
+
     repo_url, commit_sha = get_repo_info()
-    print(f"{Fore.CYAN}Searching for symbol: {args.symbol} @ {repo_url if repo_url else 'unknown'}:{commit_sha if commit_sha else 'unknown'}\n")
+    print(
+        f"{Fore.CYAN}Searching for symbol: {args.symbol} @ {repo_url if repo_url else 'unknown'}:{commit_sha if commit_sha else 'unknown'}\n"
+    )
     # Make a request to the Pluk API to search for the symbol
     res = requests.get(f"{os.environ.get('PLUK_API_URL')}/search/{args.symbol}")
     if res.status_code == 200:
         res_obj = res.json()
         # Process the response JSON and list references
-        for symbol in res_obj['symbols'] or []:
+        for symbol in res_obj["symbols"] or []:
             print(f"Found symbol: {symbol['name']}")
             # Location: file:line@commit
             print(f"Located at: {symbol['location']}")
             print()
-        if not res_obj['symbols']:
+        if not res_obj["symbols"]:
             print("No symbols found.")
     else:
         print(f"Error searching for symbol: {res.status_code}")
-        print("     Please ensure the repository indexed is public and reachable by the worker container.")
-        print("     Also ensure your latest changes are pushed to 'origin' so they are available for search.")
+        print(
+            "     Please ensure the repository indexed is public and reachable by the worker container."
+        )
+        print(
+            "     Also ensure your latest changes are pushed to 'origin' so they are available for search."
+        )
+
 
 def cmd_define(args):
     """
@@ -144,6 +167,7 @@ def cmd_define(args):
     Returns the definition of the symbol, and its location in the current repository.
     """
     import requests
+
     print(f"Defining symbol: {args.symbol}")
     print()
     # Make a request to the Pluk API to define the symbol
@@ -157,6 +181,7 @@ def cmd_define(args):
     else:
         print(f"Error defining symbol: {res.status_code}")
 
+
 def cmd_impact(args):
     """
     Analyze the impact of a symbol in the codebase.
@@ -167,6 +192,7 @@ def cmd_impact(args):
     files and lines, that reference it.
     """
     import requests
+
     print(f"Analyzing impact of symbol: {args.symbol}")
     # Make a request to the Pluk API to analyze impact
     res = requests.get(f"{os.environ.get('PLUK_API_URL')}/impact/{args.symbol}")
@@ -174,13 +200,15 @@ def cmd_impact(args):
         res_obj = res.json()
         # Process the response JSON and list impacted files
         # Outputs formatted: {"file": path, "line": line,
-                            # "container": cont_node.text.decode() if cont_node else None,
-                            # "container_kind": cont_node.type if cont_node else None}
+        # "container": cont_node.text.decode() if cont_node else None,
+        # "container_kind": cont_node.type if cont_node else None}
         print("References found:")
-        for ref in res_obj['symbol_references'] or []:
-            print(f" - {ref.get('container', '<scope unknown>')} ({ref.get('container_kind', '<kind unknown>')}) in {ref.get('file', '<file unknown>')}:{ref.get('line', '<line unknown>')}")
+        for ref in res_obj["symbol_references"] or []:
+            print(
+                f" - {ref.get('container', '<scope unknown>')} ({ref.get('container_kind', '<kind unknown>')}) in {ref.get('file', '<file unknown>')}:{ref.get('line', '<line unknown>')}"
+            )
             print()
-        if not res_obj['symbol_references']:
+        if not res_obj["symbol_references"]:
             print("No symbol references found.")
     elif res.status_code == 404:
         print("Symbol not found.")
@@ -192,6 +220,7 @@ def cmd_impact(args):
     else:
         print(f"Internal server error: {res.status_code}")
 
+
 def cmd_diff(args):
     """
     Show the differences for a symbol in the codebase from one commit to another.
@@ -200,19 +229,23 @@ def cmd_diff(args):
     over time, including modifications to its definition and usage.
     """
     import requests
+
     print(f"Showing differences for symbol: {args.symbol}")
 
     # Make a request to the Pluk API to get the diff
-    res = requests.get(f"{os.environ.get('PLUK_API_URL')}/diff/{args.symbol}/{args.from_commit}/{args.to_commit}")
+    res = requests.get(
+        f"{os.environ.get('PLUK_API_URL')}/diff/{args.symbol}/{args.from_commit}/{args.to_commit}"
+    )
     if res.status_code == 200:
         res_obj = res.json()
         print("Differences found:")
-        for diff in res_obj['differences'] or []:
+        for diff in res_obj["differences"] or []:
             print(f" - {diff}")
-        if not res_obj['differences']:
+        if not res_obj["differences"]:
             print("No differences found.")
     else:
         print(f"Error showing differences: {res.status_code}")
+
 
 def build_parser():
     """
@@ -270,6 +303,7 @@ def build_parser():
 
     return p
 
+
 def main():
     parser = build_parser()
     if len(sys.argv) == 1:
@@ -278,6 +312,7 @@ def main():
 
     args = parser.parse_args()
     args.func(args)
+
 
 if __name__ == "__main__":
     main()
