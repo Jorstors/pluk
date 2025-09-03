@@ -6,8 +6,5 @@ from psycopg.rows import dict_row
 
 # Initialize the database connection pool
 POOL = ConnectionPool(
-  os.environ.get('PLUK_DATABASE_URL'),
-  kwargs={
-    "row_factory": dict_row
-  }
+    os.environ.get("PLUK_DATABASE_URL"), kwargs={"row_factory": dict_row}
 )
