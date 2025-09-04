@@ -44,10 +44,10 @@ This creates/updates `~/.pluk/docker-compose.yml`, **pulls latest images**, and 
 
 ```bash
 pluk init /path/to/repo           # queue full index (host shim extracts repo's origin URL and commit and forwards them into the containerized CLI)
-pluk search MyClass               # fuzzy lookup; symbol matches branch-wide (cached)
+pluk search MyClass               # fuzzy lookup; symbol matches branch-wide
 pluk define my_function           # show definition (file:line@commit)
-pluk impact computeFoo            # direct dependents; blast radius (cached)
-pluk diff symbol abc123 def456    # symbol changes between commits abc123 → def456
+pluk impact computeFoo            # direct dependents; blast radius
+pluk diff symbol abc123 def456    # symbol changes between commits abc123 → def456, local to the current branch
 ```
 
 Important: the repository you index must be public (or otherwise directly reachable by the worker container). The worker clones repositories inside the container environment using the repository URL; private repositories that require credentials are not supported by the host shim workflow.
