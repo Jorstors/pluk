@@ -250,6 +250,8 @@ def cmd_diff(args):
     import requests
 
     print(f"Showing differences for symbol: {args.symbol}")
+    print(f" From commit: {args.from_commit}")
+    print(f" To commit: {args.to_commit}")
 
     # Make a request to the Pluk API to get the diff
     res = requests.get(
@@ -262,6 +264,8 @@ def cmd_diff(args):
             print(f" - {diff}")
         if not res_obj["differences"]:
             print("No differences found.")
+    elif res.status_code == 404:
+        print("Symbol not found in one of the commits.")
     else:
         print(f"Error showing differences: {res.status_code}")
 
