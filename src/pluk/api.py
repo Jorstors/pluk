@@ -99,7 +99,11 @@ def search(symbol: str) -> JSONResponse:
 
 @app.get("/impact/{symbol}")
 def impact(symbol: str) -> JSONResponse:
-    return impact_logic(symbol)
+    repo_url, commit_sha = get_repo_info()
+    if not repo_url or not commit_sha:
+        return no_init_response
+
+    return impact_logic(symbol, repo_url, commit_sha)
 
 
 @app.get("/diff/{symbol}/{from_commit}/{to_commit}")
@@ -165,8 +169,7 @@ def search_logic(symbol: str):
     return JSONResponse(status_code=200, content={"symbols": symbols})
 
 
-def impact_logic(symbol: str):
-    repo_url, commit_sha = get_repo_info()
+def impact_logic(symbol: str, repo_url: str, commit_sha: str):
     symbol_info = {}
 
     # Query symbol info from Postgres
@@ -253,8 +256,10 @@ def diff_logic(symbol: str, from_commit: str, to_commit: str):
         "removed_references": [],
     }
     # Call reindex for both commits
-    reindex_repo.delay(repo_url, from_commit)
-    reindex_repo.delay(repo_url, to_commit)
+    reindex_call_from = reindex_repo.delay(repo_url, from_commit)
+    reindex_call_to = reindex_repo.delay(repo_url, to_commit)
+    reindex_call_from.get()
+    reindex_call_to.get()
 
     # Call define to get symbol info in both commits
     symbol_info_from_res = define_logic(symbol, repo_url, from_commit)
@@ -272,7 +277,24 @@ def diff_logic(symbol: str, from_commit: str, to_commit: str):
     symbol_info_from = json.loads(symbol_info_from_res.body)["symbol"]
     symbol_info_to = json.loads(symbol_info_to_res.body)["symbol"]
 
-    if symbol_info_from != symbol_info_to:
+    equivalent = False
+    for key in [
+        "file",
+        "line",
+        "end_line",
+        "name",
+        "kind",
+        "language",
+        "signature",
+        "scope",
+        "scope_kind",
+    ]:
+        if symbol_info_from.get(key) != symbol_info_to.get(key):
+            equivalent = False
+            break
+        equivalent = True
+
+    if not equivalent:
         differences["definition_changed"] = True
         differences["definition_changed_details"] = {
             "from": symbol_info_from,
@@ -280,14 +302,14 @@ def diff_logic(symbol: str, from_commit: str, to_commit: str):
         }
 
     # Grab symbol references in both commits (impact)
-    impact_from_res = impact_logic(symbol)
-    impact_to_res = impact_logic(symbol)
+    impact_from_res = impact_logic(symbol, repo_url, from_commit)
+    impact_to_res = impact_logic(symbol, repo_url, to_commit)
     if impact_from_res.status_code not in [
         200,
         404,
     ] or impact_to_res.status_code not in [200, 404]:
         return JSONResponse(
-            status_code=404,
+            status_code=500,
             content={
                 "status": "error",
                 "message": "Failed to get symbol references in one of the commits",
@@ -297,22 +319,24 @@ def diff_logic(symbol: str, from_commit: str, to_commit: str):
     impact_from = json.loads(impact_from_res.body)["symbol_references"]
     impact_to = json.loads(impact_to_res.body)["symbol_references"]
 
-    # Compare references
-    if impact_from == impact_to:
+    from_set = {(ref["container"], ref["file"]) for ref in impact_from}
+    to_set = {(ref["container"], ref["file"]) for ref in impact_to}
+
+    if to_set == from_set:
         return JSONResponse(status_code=200, content={"differences": differences})
 
-    to_set = {(ref["file"], ref["line"]) for ref in impact_to}
-    from_set = {(ref["file"], ref["line"]) for ref in impact_from}
     new_refs_set = to_set - from_set
     removed_refs_set = from_set - to_set
 
     # Find matching references to get full details
     if new_refs_set:
         differences["new_references"] = [
-            ref for ref in impact_to if (ref["file"], ref["line"]) in new_refs_set
+            ref for ref in impact_to if (ref["container"], ref["file"] in new_refs_set)
         ]
     if removed_refs_set:
         differences["removed_references"] = [
-            ref for ref in impact_from if (ref["file"], ref["line"]) in removed_refs_set
+            ref
+            for ref in impact_from
+            if (ref["container"], ref["file"]) in removed_refs_set
         ]
     return JSONResponse(status_code=200, content={"differences": differences})

@@ -258,12 +258,62 @@ def cmd_diff(args):
         f"{os.environ.get('PLUK_API_URL')}/diff/{args.symbol}/{args.from_commit}/{args.to_commit}"
     )
     if res.status_code == 200:
-        res_obj = res.json()
+        res_obj = res.json()["differences"]
+        definition_changed = res_obj.get("definition_changed", False)
+        definition_changed_details = res_obj.get("definition_changed_details", {})
+        from_definition_changed_obj = definition_changed_details.get("from", {})
+        to_definition_changed_obj = definition_changed_details.get("to", {})
+        new_references = res_obj.get("new_references", [])
+        removed_references = res_obj.get("removed_references", [])
+
+        if not definition_changed and not new_references and not removed_references:
+            print(" No changes found.")
+            return
         print("Differences found:")
-        for diff in res_obj["differences"] or []:
-            print(f" - {diff}")
-        if not res_obj["differences"]:
-            print("No differences found.")
+        print(" - Definition:")
+        if not definition_changed:
+            print(" No changes")
+        else:
+            # Compare the two definition objects and show differences
+            for key in [
+                "file",
+                "line",
+                "end_line",
+                "name",
+                "kind",
+                "language",
+                "signature",
+                "scope",
+                "scope_kind",
+            ]:
+                from_value = from_definition_changed_obj.get(key)
+                to_value = to_definition_changed_obj.get(key)
+                if from_value != to_value:
+                    print(f"   * {key}:")
+                    print(f"       - From: {from_value}")
+                    print(f"       - To:   {to_value}")
+                else:
+                    print(f"   * {key}: No change")
+
+        print(" - New references:")
+        if not new_references:
+            print(" No new references")
+        else:
+            for ref in new_references:
+                print(
+                    f"   * {ref.get('container', '<scope unknown>')} ({ref.get('container_kind', '<kind unknown>')}) in {ref.get('file', '<file unknown>')}:{ref.get('line', '<line unknown>')}"
+                )
+                print()
+        print(" - Removed references:")
+        if not removed_references:
+            print(" No removed references")
+        else:
+            for ref in removed_references:
+                print(
+                    f"   * {ref.get('container', '<scope unknown>')} ({ref.get('container_kind', '<kind unknown>')}) in {ref.get('file', '<file unknown>')}:{ref.get('line', '<line unknown>')}"
+                )
+                print()
+
     elif res.status_code == 404:
         print("Symbol not found in one of the commits.")
     else:
