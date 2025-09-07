@@ -1,0 +1,37 @@
+# Utilize pytest to test the functionality of the project
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  run-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: [3.11, 3.12, 3.13]
+
+    name: Test
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+          pip install -e ".[api,worker,db,refs]"
+
+      - name: Run tests
+        env:
+          PLUK_REDIS_URL: "redis://localhost:6379/0"
+          DATABASE_URL: "postgresql://ignored"
+          PLUK_API_URL: "http://example.local:8000"
+        run: pytest -v
