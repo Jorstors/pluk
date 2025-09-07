@@ -330,7 +330,7 @@ def build_parser():
     """
 
     # Create the main argument parser
-    p = argparse.ArgumentParser(prog="plukd")
+    p = argparse.ArgumentParser(prog="pluk", description="Pluk CLI")
     sub = p.add_subparsers(dest="command", required=True)
 
     # === Define subcommands ===
