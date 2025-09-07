@@ -25,6 +25,7 @@ api    = ["fastapi>=0.116", "uvicorn[standard]>=0.35"]
 worker = ["celery>=5.3", "gitpython>=3.1"]
 db     = ["psycopg[binary,pool]>=3.1"]
 refs   = ["tree-sitter>=0.24,<0.26", "tree-sitter-language-pack>=0.6.0"]
+test = ["pytest>=7.0", "httpx>=0.24"]
 
 [project.scripts]
 pluk = "pluk.shim:main"

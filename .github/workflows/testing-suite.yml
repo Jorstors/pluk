@@ -27,7 +27,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pytest
-          pip install -e ".[api,worker,db,refs]"
+          pip install -e ".[api,worker,db,refs,test]"
 
       - name: Run tests
         env:
