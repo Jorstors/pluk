@@ -80,10 +80,38 @@ def status(job_id: str):
 
 
 @app.get("/define/{symbol}")
-def define(symbol: str):
+def define(symbol: str) -> JSONResponse:
     repo_url, commit_sha = get_repo_info()
     if not repo_url or not commit_sha:
         return no_init_response
+
+    return define_logic(symbol, repo_url, commit_sha)
+
+
+@app.get("/search/{symbol}")
+def search(symbol: str) -> JSONResponse:
+    """
+    Fuzzy search for symbols in the current commit.
+    Returns results matching the symbol name across all symbols in the current commit.
+    """
+    return search_logic(symbol)
+
+
+@app.get("/impact/{symbol}")
+def impact(symbol: str) -> JSONResponse:
+    repo_url, commit_sha = get_repo_info()
+    if not repo_url or not commit_sha:
+        return no_init_response
+
+    return impact_logic(symbol, repo_url, commit_sha)
+
+
+@app.get("/diff/{symbol}/{from_commit}/{to_commit}")
+def diff(symbol: str, from_commit: str, to_commit: str):
+    return diff_logic(symbol, from_commit, to_commit)
+
+
+def define_logic(symbol: str, repo_url: str, commit_sha: str):
     symbol_info = {}
     with POOL.connection() as conn:
         with conn.cursor() as cur:
@@ -115,15 +143,8 @@ def define(symbol: str):
             return JSONResponse(status_code=200, content={"symbol": symbol_info})
 
 
-@app.get("/search/{symbol}")
-def search(symbol: str):
-    """
-    Fuzzy search for symbols in the current commit.
-    Returns results matching the symbol name across all symbols in the current commit.
-    """
+def search_logic(symbol: str):
     repo_url, commit_sha = get_repo_info()
-    if not repo_url or not commit_sha:
-        return no_init_response
     symbols = []
     with POOL.connection() as conn:
         with conn.cursor() as cur:
@@ -148,12 +169,7 @@ def search(symbol: str):
     return JSONResponse(status_code=200, content={"symbols": symbols})
 
 
-@app.get("/impact/{symbol}")
-def impact(symbol: str):
-    repo_url, commit_sha = get_repo_info()
-    if not repo_url or not commit_sha:
-        return no_init_response
-
+def impact_logic(symbol: str, repo_url: str, commit_sha: str):
     symbol_info = {}
 
     # Query symbol info from Postgres
@@ -224,9 +240,103 @@ def impact(symbol: str):
     )
 
 
-@app.get("/diff/{symbol}/{from_commit}/{to_commit}")
-def diff(symbol: str, from_commit: str, to_commit: str):
+def diff_logic(symbol: str, from_commit: str, to_commit: str):
+    # - Initialize both commits if they are not already indexed
+    # - Find the symbol definition and references in both commits
+    # - Compare the references and definitions to find differences
+    # - Return the differences
+    import json
+
     repo_url, commit_sha = get_repo_info()
-    if not repo_url or not commit_sha:
-        return no_init_response
-    return JSONResponse(status_code=200, content={"differences": ["diff1", "diff2"]})
+
+    differences = {
+        "definition_changed": False,
+        "definition_changed_details": {},
+        "new_references": [],
+        "removed_references": [],
+    }
+    # Call reindex for both commits
+    reindex_call_from = reindex_repo.delay(repo_url, from_commit)
+    reindex_call_to = reindex_repo.delay(repo_url, to_commit)
+    reindex_call_from.get()
+    reindex_call_to.get()
+
+    # Call define to get symbol info in both commits
+    symbol_info_from_res = define_logic(symbol, repo_url, from_commit)
+    symbol_info_to_res = define_logic(symbol, repo_url, to_commit)
+    if symbol_info_from_res.status_code != 200 or symbol_info_to_res.status_code != 200:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "status": "error",
+                "message": "Symbol not found in one of the commits",
+            },
+        )
+    # Compare definitions
+    # Convert response bodies to JSON
+    symbol_info_from = json.loads(symbol_info_from_res.body)["symbol"]
+    symbol_info_to = json.loads(symbol_info_to_res.body)["symbol"]
+
+    equivalent = False
+    for key in [
+        "file",
+        "line",
+        "end_line",
+        "name",
+        "kind",
+        "language",
+        "signature",
+        "scope",
+        "scope_kind",
+    ]:
+        if symbol_info_from.get(key) != symbol_info_to.get(key):
+            equivalent = False
+            break
+        equivalent = True
+
+    if not equivalent:
+        differences["definition_changed"] = True
+        differences["definition_changed_details"] = {
+            "from": symbol_info_from,
+            "to": symbol_info_to,
+        }
+
+    # Grab symbol references in both commits (impact)
+    impact_from_res = impact_logic(symbol, repo_url, from_commit)
+    impact_to_res = impact_logic(symbol, repo_url, to_commit)
+    if impact_from_res.status_code not in [
+        200,
+        404,
+    ] or impact_to_res.status_code not in [200, 404]:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": "Failed to get symbol references in one of the commits",
+            },
+        )
+
+    impact_from = json.loads(impact_from_res.body)["symbol_references"]
+    impact_to = json.loads(impact_to_res.body)["symbol_references"]
+
+    from_set = {(ref["container"], ref["file"]) for ref in impact_from}
+    to_set = {(ref["container"], ref["file"]) for ref in impact_to}
+
+    if to_set == from_set:
+        return JSONResponse(status_code=200, content={"differences": differences})
+
+    new_refs_set = to_set - from_set
+    removed_refs_set = from_set - to_set
+
+    # Find matching references to get full details
+    if new_refs_set:
+        differences["new_references"] = [
+            ref for ref in impact_to if (ref["container"], ref["file"] in new_refs_set)
+        ]
+    if removed_refs_set:
+        differences["removed_references"] = [
+            ref
+            for ref in impact_from
+            if (ref["container"], ref["file"]) in removed_refs_set
+        ]
+    return JSONResponse(status_code=200, content={"differences": differences})
