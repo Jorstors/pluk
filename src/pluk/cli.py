@@ -143,7 +143,7 @@ def cmd_search(args):
         for symbol in res_obj["symbols"] or []:
             print(f"Found symbol: {symbol['name']}")
             # Location: file:line@commit
-            print(f"Located at: {symbol['location']}")
+            print(f" Located at: {symbol['location']}")
             print()
         if not res_obj["symbols"]:
             print("No symbols found.")
@@ -221,14 +221,15 @@ def cmd_impact(args):
         # Outputs formatted: {"file": path, "line": line,
         # "container": cont_node.text.decode() if cont_node else None,
         # "container_kind": cont_node.type if cont_node else None}
+        print()
         print("References found:")
         for ref in res_obj["symbol_references"] or []:
             print(
-                f" - {ref.get('container', '<scope unknown>')} ({ref.get('container_kind', '<kind unknown>')}) in {ref.get('file', '<file unknown>')}:{ref.get('line', '<line unknown>')}"
+                f" {ref.get('container', '<scope unknown>')} ({ref.get('container_kind', '<kind unknown>')}) in {ref.get('file', '<file unknown>')}:{ref.get('line', '<line unknown>')}"
             )
             print()
         if not res_obj["symbol_references"]:
-            print("No symbol references found.")
+            print(" No symbol references found.")
     elif res.status_code == 404:
         print("Symbol not found.")
     elif res.status_code == 405:
@@ -270,7 +271,7 @@ def cmd_diff(args):
             print(" No changes found.")
             return
         print("Differences found:")
-        print(" - Definition:")
+        print(" Definition:")
         if not definition_changed:
             print(" No changes")
         else:
@@ -289,30 +290,31 @@ def cmd_diff(args):
                 from_value = from_definition_changed_obj.get(key)
                 to_value = to_definition_changed_obj.get(key)
                 if from_value != to_value:
-                    print(f"   * {key}:")
-                    print(f"       - From: {from_value}")
-                    print(f"       - To:   {to_value}")
+                    print(f" * {key}:")
+                    print(f"     - From: {from_value}")
+                    print(f"     - To:   {to_value}")
                 else:
-                    print(f"   * {key}: No change")
+                    print(f" * {key}: No change")
 
-        print(" - New references:")
+        print()
+        print(" New references:")
         if not new_references:
             print(" No new references")
         else:
             for ref in new_references:
                 print(
-                    f"   * {ref.get('container', '<scope unknown>')} ({ref.get('container_kind', '<kind unknown>')}) in {ref.get('file', '<file unknown>')}:{ref.get('line', '<line unknown>')}"
+                    f" * {ref.get('container', '<scope unknown>')} ({ref.get('container_kind', '<kind unknown>')}) in {ref.get('file', '<file unknown>')}:{ref.get('line', '<line unknown>')}"
                 )
-                print()
-        print(" - Removed references:")
+        print()
+        print(" Removed references:")
         if not removed_references:
             print(" No removed references")
         else:
             for ref in removed_references:
                 print(
-                    f"   * {ref.get('container', '<scope unknown>')} ({ref.get('container_kind', '<kind unknown>')}) in {ref.get('file', '<file unknown>')}:{ref.get('line', '<line unknown>')}"
+                    f" * {ref.get('container', '<scope unknown>')} ({ref.get('container_kind', '<kind unknown>')}) in {ref.get('file', '<file unknown>')}:{ref.get('line', '<line unknown>')}"
                 )
-                print()
+        print()
 
     elif res.status_code == 404:
         print("Symbol not found in one of the commits.")
@@ -330,7 +332,7 @@ def build_parser():
     """
 
     # Create the main argument parser
-    p = argparse.ArgumentParser(prog="plukd")
+    p = argparse.ArgumentParser(prog="pluk", description="Pluk CLI")
     sub = p.add_subparsers(dest="command", required=True)
 
     # === Define subcommands ===

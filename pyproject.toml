@@ -5,6 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pluk"
 version = "0.6.0"
+version = "0.6.1"
 description = "Symbol lookup / search engine CLI"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -36,6 +37,7 @@ package-dir = {"" = "src"}
 
 [tool.bumpver]
 current_version = "v0.6.0"
+current_version = "v0.6.1"
 version_pattern = "vMAJOR.MINOR.PATCH"
 commit_message = "bump version {old_version} -> {new_version}"
 tag_message = "{new_version}"
