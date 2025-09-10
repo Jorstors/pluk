@@ -22,7 +22,7 @@ class DummyRedis:
 class FakeResp:
     def __init__(self, code=200, data=None, text=""):
         self.status_code = code
-        self._data = data or {"symbols": []}
+        self._data = data or {"symbol_info": {}}
         self.text = text
 
     def json(self):
