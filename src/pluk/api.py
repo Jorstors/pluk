@@ -277,7 +277,7 @@ def diff_logic(symbol: str, from_commit: str, to_commit: str):
     symbol_info_from = json.loads(symbol_info_from_res.body)["symbol"]
     symbol_info_to = json.loads(symbol_info_to_res.body)["symbol"]
 
-    equivalent = False
+    equivalent = True
     for key in [
         "file",
         "line",
@@ -292,7 +292,6 @@ def diff_logic(symbol: str, from_commit: str, to_commit: str):
         if symbol_info_from.get(key) != symbol_info_to.get(key):
             equivalent = False
             break
-        equivalent = True
 
     if not equivalent:
         differences["definition_changed"] = True
@@ -331,7 +330,7 @@ def diff_logic(symbol: str, from_commit: str, to_commit: str):
     # Find matching references to get full details
     if new_refs_set:
         differences["new_references"] = [
-            ref for ref in impact_to if (ref["container"], ref["file"] in new_refs_set)
+            ref for ref in impact_to if (ref["container"], ref["file"]) in new_refs_set
         ]
     if removed_refs_set:
         differences["removed_references"] = [
