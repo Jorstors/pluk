@@ -12,53 +12,131 @@ Pluk gives developers “go-to-definition”, “find-all-references”, and “
 
 ---
 
-## Key Features
-
-- **Fuzzy symbol search** (`pluk search`) for finding symbols in the current commit
-- **Definition lookup** (`pluk define`)
-- **Impact analysis** (`pluk impact`) to trace downstream dependents
-- **Commit-aware indexing** (`pluk diff`) across Git history
-- **Containerized backend**: PostgreSQL (graph) + Redis (broker/cache)
-- **Strict lifecycle**: `pluk start` (host shim) is required before any containerized commands; use the shim on the host to manage services (`start`, `status`, `cleanup`).
-- **Host controls**: `pluk status` to check, `pluk cleanup` to stop services
+## Features
+-  **Search**: classes, functions, and other symbols in your repo  
+-  **Define**: list metadata about a specific symbol 
+-  **Impact**: find references and usage contexts of a symbol  
+-  **Diff**: compare definitions and references between commits  
+-  **Indexing**: via universal-ctags and tree-sitter (one branch at a time)
+-  **Containerized**: runs with Docker Compose, no host setup needed  
+-  **Language support:** Python, JavaScript, TypeScript, Go, Java, C, C++
 
 ---
 
-## Quickstart
+## Prerequisites
+- Docker and Docker Compose
+- Git repositories must be **public or cloneable** from inside the container  
+- Supported OS: Linux, macOS, Windows (with Docker Desktop)
 
-1. **Install**
-
+---
+## Installation
 ```bash
 pip install pluk
 ```
+---
 
-2. **Start services (required)**
+## Usage
 
 ```bash
-pluk start
+pluk start                        # launch services
+pluk status                       # check if services are running
+pluk cleanup                      # stop services
+
+pluk init /path/to/repo           # queue full index of a repository
+pluk search MyClass               # symbol lookup; symbol matches branch-wide
+pluk define my_function           # show symbol definition
+pluk impact computeFoo            # list symbol references with context
+pluk diff symbol SHA-1 SHA-2      # show symbol changes between commit SHAs SHA-1 → SHA-2
 ```
 
-This creates/updates `~/.pluk/docker-compose.yml`, **pulls latest images**, and brings up: `postgres`, `redis`, `api` (FastAPI), `worker` (Celery), and `cli` (idle exec target). The API stays **internal** to the Docker network. Note: service lifecycle commands (`start`, `status`, `cleanup`) are implemented in the host shim; run them on your host shell using the `pluk` command.
+Start the Pluk services:
 
-3. **Index and query**
+```powershell
+> pluk start
+Pulling latest Docker images...
+Starting Pluk services...
+[+] Running 5/5
+ ✔ Container pluk-redis-1     Healthy                                                                                                                                                                                                                                           7.5s 
+ ✔ Container pluk-postgres-1  Healthy                                                                                                                                                                                                                                           7.5s 
+ ✔ Container pluk-api-1       Started                                                                                                                                                                                                                                           7.0s 
+ ✔ Container pluk-worker-1    Started                                                                                                                                                                                                                                           8.0s 
+ ✔ Container pluk-cli-1       Started                                                                                                                                                                                                                                           7.4s 
+Pluk services are now running.
 
-```bash
-pluk init /path/to/repo           # queue full index (host shim extracts repo's origin URL and commit and forwards them into the containerized CLI)
-pluk search MyClass               # fuzzy lookup; symbol matches branch-wide
-pluk define my_function           # show definition (file:line@commit)
-pluk impact computeFoo            # direct dependents; blast radius
-pluk diff symbol abc123 def456    # symbol changes between commits abc123 → def456, local to the current branch
 ```
 
-Important: the repository you index must be public (or otherwise directly reachable by the worker container). The worker clones repositories inside the container environment using the repository URL; private repositories that require credentials are not supported by the host shim workflow.
+Initialize a repository:
 
-**Note:** CLI commands that poll for job status (like `pluk init`) now display real-time output, thanks to unbuffered Python output in the CLI container.
+```powershell
+> pluk init .
+Initializing repository at .
+[+] Repository initialized successfully.
+Current repository:
+    URL: https://github.com/jorstors/pluk-diff-sample
+    Commit SHA: dd36847d0f55c5af6e70ee920837c782d09edbc2
 
-4. **Check / stop (host-side)**
+```
 
-```bash
-pluk status     # tells you if services are running
-pluk cleanup    # stops services (containers stay; fast restart)
+Search for a symbol:
+
+```powershell
+> pluk search find
+Searching for symbol: find @ https://github.com/jorstors/pluk-diff-sample:dd36847d0f55c5af6e70ee920837c782d09edbc2
+
+Found symbol: find_refs
+ Located at: src/app.py:1
+```
+
+Define a symbol:
+
+```powershell
+> pluk define find_refs
+Defining symbol: find_refs
+
+Symbol: find_refs
+ Location: src/app.py:1-3
+ Kind: function
+ Language: Python
+ Signature: (x)
+ Scope: global (unknown)
+```
+
+Check symbol impact:
+
+```powershell
+> pluk impact find_refs
+Analyzing impact of symbol: find_refs
+
+References found:
+ other (function_definition) in src/app.py:13
+```
+
+Diff a symbol across commits:
+
+```powershell
+> pluk diff find_refs caa599294066de31f01305a781ca8ff0bbe06aba dd36847d0f55c5af6e70ee920837c782d09edbc2
+Showing differences for symbol: find_refs
+ From commit: caa599294066de31f01305a781ca8ff0bbe06aba
+ To commit: dd36847d0f55c5af6e70ee920837c782d09edbc2
+Differences found:
+ Definition:
+ * file: No change
+ * line: No change
+ * end_line:
+     - From: 2
+     - To:   3
+ * name: No change
+ * kind: No change
+ * language: No change
+ * signature: No change
+ * scope: No change
+ * scope_kind: No change
+
+ New references:
+ * other (function_definition) in src/app.py:13
+
+ Removed references:
+ * use (function_definition) in src/app.py:6
 ```
 
 If you want a full teardown (remove containers/network), use:
@@ -78,37 +156,7 @@ docker compose -f ~/.pluk/docker-compose.yml down -v
 - **Host shim (`pluk`)** writes the Compose file, **pulls images**, and runs `docker compose up`.
 - **CLI container (`plukd`)** is the exec target; it calls the API at `http://api:8000`.
 - **API (FastAPI)** serves read endpoints (`/search`, `/define`, `/impact`, `/diff`) and enqueues write jobs (`/reindex`) to **Redis**.
-- **Worker (Celery)** consumes jobs from **Redis**, clones/pulls repos into a volume (`/var/pluk/repos`), parses deltas, and writes to **Postgres**.
-- Reads never block on indexing; write progress can be polled via job status endpoints (planned).
-
----
-
-## Architecture (current)
-
-- **Single image, multiple roles**: Compose selects per-service `command`
-  - `api` → `uvicorn pluk.api:app --host 0.0.0.0 --port 8000`
-  - `worker` → `celery -A pluk.worker worker -l info`
-  - `cli` → `sleep infinity` (keeps container up for `docker compose exec`)
-- **Internal networking**: API is _not_ exposed to the host; CLI calls it over Docker DNS (`PLUK_API_URL=http://api:8000`).
-- **Config**: `PLUK_DATABASE_URL`, `PLUK_REDIS_URL` injected via Compose; worker uses `PLUK_REPOS_DIR=/var/pluk/repos`.
-- **Images**: by default the shim uses `jorstors/pluk:latest`, `postgres:16-alpine`, and `redis-alpine`
-
----
-
-## Development
-
-- **Project layout** (`src/pluk`):
-  - `shim.py` — host shim entrypoint (`pluk`)
-  - `cli.py` — container CLI (`plukd`)
-  - `api.py` — FastAPI app (internal API)
-  - `worker.py` — Celery app & tasks
-- **Entry points** (`pyproject.toml`):
-
-```toml
-[project.scripts]
-pluk  = "pluk.shim:main"
-plukd = "pluk.cli:main"
-```
+- **Worker (Celery)** consumes jobs from **Redis**, clones/pulls repos into a volume (`/var/pluk/repos`), parses it, and writes to **Postgres**.
 
 ---
 
@@ -117,9 +165,6 @@ plukd = "pluk.cli:main"
 ```bash
 pytest
 ```
-
-Docker must be running; services must be started via `pluk start` for integration tests.
-
 ---
 
 ## License
