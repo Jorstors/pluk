@@ -13,19 +13,19 @@ Pluk gives developers “go-to-definition”, “find-all-references”, and “
 ---
 
 ## Features
--  **Search**: classes, functions, and other symbols in your repo  
--  **Define**: list metadata about a specific symbol 
--  **Impact**: find references and usage contexts of a symbol  
--  **Diff**: compare definitions and references between commits  
+-  **Search**: classes, functions, and other symbols in your repo
+-  **Define**: list metadata about a specific symbol
+-  **Impact**: find references and usage contexts of a symbol
+-  **Diff**: compare definitions and references between commits
 -  **Indexing**: via universal-ctags and tree-sitter (one branch at a time)
--  **Containerized**: runs with Docker Compose, no host setup needed  
--  **Language support:** Python, JavaScript, TypeScript, Go, Java, C, C++
+-  **Containerized**: runs with Docker Compose, no host setup needed
+-  **Language support:** Python, JavaScript (incl. JSX), TypeScript (incl. TSX), Go, Java, C, C++
 
 ---
 
 ## Prerequisites
 - Docker and Docker Compose
-- Git repositories must be **public or cloneable** from inside the container  
+- Git repositories must be **public or cloneable** from inside the container
 - Supported OS: Linux, macOS, Windows (with Docker Desktop)
 
 ---
@@ -46,7 +46,7 @@ pluk init /path/to/repo           # queue full index of a repository
 pluk search MyClass               # symbol lookup; symbol matches branch-wide
 pluk define my_function           # show symbol definition
 pluk impact computeFoo            # list symbol references with context
-pluk diff symbol SHA-1 SHA-2      # show symbol changes between commit SHAs SHA-1 → SHA-2
+pluk diff symbol <ref1> <ref2>    # compare symbol changes between commits/aliases (e.g. head, main, or SHAs)
 ```
 
 Start the Pluk services:
@@ -56,11 +56,11 @@ Start the Pluk services:
 Pulling latest Docker images...
 Starting Pluk services...
 [+] Running 5/5
- ✔ Container pluk-redis-1     Healthy                                                                                                                                                                                                                                           7.5s 
- ✔ Container pluk-postgres-1  Healthy                                                                                                                                                                                                                                           7.5s 
- ✔ Container pluk-api-1       Started                                                                                                                                                                                                                                           7.0s 
- ✔ Container pluk-worker-1    Started                                                                                                                                                                                                                                           8.0s 
- ✔ Container pluk-cli-1       Started                                                                                                                                                                                                                                           7.4s 
+ ✔ Container pluk-redis-1     Healthy                                                                                                                                                                                                                                           7.5s
+ ✔ Container pluk-postgres-1  Healthy                                                                                                                                                                                                                                           7.5s
+ ✔ Container pluk-api-1       Started                                                                                                                                                                                                                                           7.0s
+ ✔ Container pluk-worker-1    Started                                                                                                                                                                                                                                           8.0s
+ ✔ Container pluk-cli-1       Started                                                                                                                                                                                                                                           7.4s
 Pluk services are now running.
 
 ```

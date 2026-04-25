@@ -311,7 +311,24 @@ def main():
         cmd += ["-e", f"PLUK_REPO_COMMIT_SHA={env['PLUK_REPO_COMMIT_SHA']}"]
 
     cmd += ["cli", "plukd"]
-    cmd += sys.argv[1:]
+
+    forward_args = sys.argv[1:]
+
+    # Resolve git referential aliases for the diff command
+    if len(forward_args) >= 4 and forward_args[0] == "diff":
+        try:
+            from_c = subprocess.check_output(
+                ["git", "rev-parse", forward_args[2]], text=True, stderr=subprocess.DEVNULL
+            ).strip()
+            to_c = subprocess.check_output(
+                ["git", "rev-parse", forward_args[3]], text=True, stderr=subprocess.DEVNULL
+            ).strip()
+            forward_args[2] = from_c
+            forward_args[3] = to_c
+        except Exception:
+            pass # Fallback to original input gracefully
+
+    cmd += forward_args
 
     # Execute the command and capture output
     try:

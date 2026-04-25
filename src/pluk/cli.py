@@ -357,11 +357,11 @@ def build_parser():
     p_impact.add_argument("symbol", help="Symbol name")
     p_impact.set_defaults(func=cmd_impact)
 
-    # Show differences for a symbol (between commits)
+    # Show differences for a symbol (between commits/aliases)
     p_diff = sub.add_parser("diff", help="Show differences for a symbol")
     p_diff.add_argument("symbol", help="Symbol name")
-    p_diff.add_argument("from_commit", help="Commit to compare from")
-    p_diff.add_argument("to_commit", help="Commit to compare to")
+    p_diff.add_argument("from_commit", help="Commit SHA or git alias (e.g. head) to compare from")
+    p_diff.add_argument("to_commit", help="Commit SHA or git alias (e.g. main) to compare to")
     p_diff.set_defaults(func=cmd_diff)
 
     # Start Pluk services
