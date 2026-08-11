@@ -1,325 +1,218 @@
 # src/pluk/cli.py
 
 import argparse
-import sys
+import json
 import os
-import time
+import sys
+
 from colorama import Fore, Style, init
-import redis
 
-redis_client = redis.Redis.from_url(
-    os.environ.get("PLUK_REDIS_URL"), decode_responses=True
-)
+from pluk import __version__
+from pluk.indexer import index
+from pluk.query import PlukError, SYMBOL_FIELDS
+from pluk import query
 
-init(autoreset=True)
+# colorama strips escapes when stdout is not a tty, so piping stays clean.
+init(autoreset=True, strip=True if os.environ.get("NO_COLOR") else None)
+
+SYMBOL = Fore.CYAN + Style.BRIGHT
+LOCATION = Fore.BLUE
+LABEL = Style.DIM
+KIND = Fore.MAGENTA
+HEADING = Style.BRIGHT
+GOOD = Fore.GREEN + Style.BRIGHT
+WARN = Fore.YELLOW
+REMOVED = Fore.RED
+ADDED = Fore.GREEN
 
 
-def get_repo_info():
-    repo_url = redis_client.get("repo_url")
-    commit_sha = redis_client.get("commit_sha")
-    if not repo_url or not commit_sha:
-        return None, None
-    return repo_url, commit_sha
+def paint(text, style):
+    return f"{style}{text}{Style.RESET_ALL}"
 
 
-# Initialize a repository
+def field(label, value, width=10):
+    """A dim, aligned label followed by its value."""
+    return f" {paint(f'{label + ":":<{width}}', LABEL)} {value}"
+
+
+def emit(args, payload):
+    """Print structured output when --json is set. Returns True if it did."""
+    if getattr(args, "json", False):
+        print(json.dumps(payload, indent=2))
+        return True
+    return False
+
+
 def cmd_init(args):
     """
-    Initialize a repository at the specified path.
+    Index a git repository.
 
-    This command queues a full index job for a repository.
-
-    IMPORTANT: the repository to be indexed must be public (or otherwise
-    directly accessible from the worker container). Workers clone repositories
-    using the repository URL; private repositories that require credentials are
-    not supported by the host shim workflow. When `pluk init /path/to/repo` is
-    invoked on the host, the shim extracts the repo's remote URL and commit
-    SHA and forwards them into the CLI container via the environment
-    variables `PLUK_REPO_URL` and `PLUK_REPO_COMMIT_SHA` before asking the
-    API to enqueue the reindex job.
+    The repository is read where it sits -- nothing is copied and nothing
+    leaves the machine. A remote URL may be given instead of a path, in which
+    case it is mirrored under ~/.pluk/repos first.
     """
-    import requests
+    progress = None if args.json else (lambda message: print(paint(message, LABEL)))
+    result = index(args.path, args.rev, force=args.force, on_progress=progress)
 
-    print(f"Initializing repository at {args.path}")
-    # Grab repo information to send to the API
-    repo_url = os.environ.get("PLUK_REPO_URL")
-    repo_commit_sha = os.environ.get("PLUK_REPO_COMMIT_SHA")
-    # Make a request to the Pluk API to initialize the repository
-    reindex_res = requests.post(
-        f"{os.environ.get('PLUK_API_URL')}/reindex/",
-        json={"repo_url": repo_url, "commit_sha": repo_commit_sha},
-    )
-    if reindex_res.status_code == 200:
-        sys.stdout.write("[+] Indexing started...")
-        job_id = reindex_res.json()["job_id"]
-        # Check job status
-        start_time = time.perf_counter()
-        while True:
-            elapsed_time = time.perf_counter() - start_time
-            job_status_res = requests.get(
-                f"{os.environ.get('PLUK_API_URL')}/status/{job_id}"
-            )
-            if job_status_res.status_code == 200:
-                res_obj = job_status_res.json()
-                status = res_obj["status"]
-                if status == "SUCCESS":
-                    job_result = res_obj["result"]
-                    if job_result["status"] == "FINISHED":
-                        break
-                    elif job_result["status"] == "ERROR":
-                        print(
-                            f"\n[/] Error initializing repository: {job_result['error_message']}"
-                        )
-                        return
-                elif status == "FAILURE":
-                    print(f"\n[/] Failed to initialize repository: {status}")
-                    return
-                # Update the console output with the current indexing status
-                sys.stdout.write(f"\r[-] Indexing {elapsed_time:.1f}s: {status}     ")
-                sys.stdout.flush()
-            time.sleep(0.1)
+    if emit(args, result):
+        return
 
-        sys.stdout.write(
-            f"\r[+] Repository initialized successfully.                                       "
-        )
-        print("\nCurrent repository:")
-        repo_url, commit_sha = get_repo_info()
-        print(f"    URL: {repo_url}")
-        print(f"    Commit SHA: {commit_sha}")
+    print()
+    if result["status"] == "skipped":
+        print(paint("[+] Already indexed.", GOOD))
     else:
-        print(f"Error initializing repository: {reindex_res.status_code}")
-    return
-
-
-def cmd_start(args):
-    """
-    Start the Pluk services.
-
-    NOTE: Starting/stopping/status commands are handled by the host shim (`pluk`)
-    and affect Docker Compose on the host. Invoking `start` inside the CLI
-    container (`plukd`) is a no-op; use the host shim command `pluk start`.
-    """
-    return
-
-
-def cmd_cleanup(args):
-    """
-    Stop the Pluk services.
-
-    NOTE: This is a host-level command handled by the shim (`pluk`). Use
-    `pluk cleanup` on the host to stop the Docker Compose stack. Running this
-    inside the CLI container does not perform host-level cleanup.
-    """
-    return
-
-
-def cmd_status(args):
-    """
-    Check the status of Pluk services.
-
-    NOTE: Service lifecycle commands (`start`, `status`, `cleanup`) are
-    implemented in the host shim. Use `pluk status` on the host to inspect the
-    current Docker Compose state.
-    """
-    return
+        print(paint(f"[+] {result['symbols']} symbols indexed.", GOOD))
+    print(paint("Current repository:", HEADING))
+    print(field("URL", paint(result["repo_url"], LOCATION), width=11))
+    print(field("Commit", paint(result["commit_sha"], LOCATION), width=11))
 
 
 def cmd_search(args):
-    """
-    Fuzzy search for symbols in the current indexed commit. Uses the
-    repository currently registered with the service (see `pluk init`).
-    """
-    import requests
+    """Fuzzy search for symbols in the current indexed commit."""
+    result = query.search(args.symbol)
 
-    repo_url, commit_sha = get_repo_info()
+    if emit(args, result):
+        return
+
+    symbols = result["symbols"]
     print(
-        f"{Fore.CYAN}Searching for symbol: {args.symbol} @ {repo_url if repo_url else 'unknown'}:{commit_sha if commit_sha else 'unknown'}\n"
+        paint(f"Searching for {args.symbol}", HEADING)
+        + paint(f"  @ {result['repo_url']}:{result['commit_sha'][:12]}", LABEL)
     )
-    # Make a request to the Pluk API to search for the symbol
-    res = requests.get(f"{os.environ.get('PLUK_API_URL')}/search/{args.symbol}")
-    if res.status_code == 200:
-        res_obj = res.json()
-        # Process the response JSON and list references
-        for symbol in res_obj["symbols"] or []:
-            print(f"Found symbol: {symbol['name']}")
-            # Location: file:line@commit
-            print(f" Located at: {symbol['location']}")
-            print()
-        if not res_obj["symbols"]:
-            print("No symbols found.")
-    else:
-        print(f"Error searching for symbol: {res.status_code}")
-        print(
-            "     Please ensure the repository indexed is public and reachable by the worker container."
-        )
-        print(
-            "     Also ensure your latest changes are pushed to 'origin' so they are available for search."
-        )
+    print()
+
+    if not symbols:
+        print(paint("No symbols found.", WARN))
+        return
+
+    for symbol in symbols:
+        print(f"{paint(symbol['name'], SYMBOL)}  {paint(symbol['location'], LOCATION)}")
+    print()
+    print(paint(f"{len(symbols)} match{'es' if len(symbols) != 1 else ''}.", LABEL))
 
 
 def cmd_define(args):
-    """
-    Define a symbol in the current repository.
+    """Show a symbol's definition and its location in the current repository."""
+    symbol = query.define(args.symbol)
 
-    This command allows users to define a symbol,
-    which can be useful for documentation or metadata purposes.
+    if emit(args, symbol):
+        return
 
-    Returns the definition of the symbol, and its location in the current repository.
-    """
-    import requests
+    end_line = symbol["end_line"]
+    span = f"{symbol['file']}:{symbol['line']}{f'-{end_line}' if end_line else ''}"
+    scope = symbol["scope"] or "global"
+    scope_kind = paint(f"({symbol['scope_kind'] or 'unknown'})", LABEL)
 
-    print(f"Defining symbol: {args.symbol}")
+    print(f"{paint(symbol['name'], SYMBOL)}{paint(symbol['signature'] or '', KIND)}")
+    print(field("Location", paint(span, LOCATION)))
+    print(field("Kind", paint(symbol["kind"] or "unknown", KIND)))
+    print(field("Language", symbol["language"] or "unknown"))
+    print(field("Scope", f"{scope} {scope_kind}"))
     print()
-    # Make a request to the Pluk API to define the symbol
-    # API returns the symbol definition and its location
-    res = requests.get(f"{os.environ.get('PLUK_API_URL')}/define/{args.symbol}")
-    if res.status_code == 200:
-        symbol_info_res = res.json()["symbol"]
-        file, line, end_line, name, kind, language, signature, scope, scope_kind = (
-            symbol_info_res.get("file", "unknown"),
-            symbol_info_res.get("line", -1),
-            symbol_info_res.get("end_line", None),
-            symbol_info_res.get("name", "unknown"),
-            symbol_info_res.get("kind", None),
-            symbol_info_res.get("language", None),
-            symbol_info_res.get("signature", None),
-            symbol_info_res.get("scope", None),
-            symbol_info_res.get("scope_kind", None),
-        )
-        print(f"Symbol: {args.symbol}")
-        print(f" Location: {file}:{line}{f'-{end_line}' if end_line else ''}")
-        print(f" Kind: {kind if kind else 'unknown'}")
-        print(f" Language: {language if language else 'unknown'}")
-        print(f" Signature: {signature if signature else 'unknown'}")
-        print(
-            f" Scope: {scope if scope else 'global'} ({scope_kind if scope_kind else 'unknown'})"
-        )
-        print()
-    elif res.status_code == 404:
-        print("Symbol not found.")
-    else:
-        print(f"Error defining symbol: {res.status_code}")
 
 
 def cmd_impact(args):
     """
-    Analyze the impact of a symbol in the codebase.
+    Show everything that depends on a symbol.
 
-    Shows everything that depends on the symbol in the current repository.
-    This command allows users to understand the potential impact of
-    changes to a symbol by listing all symbols, including their
-    files and lines, that reference it.
+    Lists every reference to the symbol along with the function or class that
+    contains it, so the blast radius of a change is visible at a glance.
     """
-    import requests
+    references = query.impact(args.symbol)
 
-    print(f"Analyzing impact of symbol: {args.symbol}")
-    # Make a request to the Pluk API to analyze impact
-    res = requests.get(f"{os.environ.get('PLUK_API_URL')}/impact/{args.symbol}")
-    if res.status_code == 200:
-        res_obj = res.json()
-        # Process the response JSON and list impacted files
-        # Outputs formatted: {"file": path, "line": line,
-        # "container": cont_node.text.decode() if cont_node else None,
-        # "container_kind": cont_node.type if cont_node else None}
-        print()
-        print("References found:")
-        for ref in res_obj["symbol_references"] or []:
-            print(
-                f" {ref.get('container', '<scope unknown>')} ({ref.get('container_kind', '<kind unknown>')}) in {ref.get('file', '<file unknown>')}:{ref.get('line', '<line unknown>')}"
-            )
-            print()
-        if not res_obj["symbol_references"]:
-            print(" No symbol references found.")
-    elif res.status_code == 404:
-        print("Symbol not found.")
-    elif res.status_code == 405:
-        print("Language not supported.")
-        print("Please refer to the documentation for supported languages.")
-    elif res.status_code == 500:
-        print("Repository not initialized.")
-    else:
-        print(f"Internal server error: {res.status_code}")
+    if emit(args, {"symbol": args.symbol, "symbol_references": references}):
+        return
+
+    print(paint(f"Impact of {args.symbol}", HEADING))
+    print()
+
+    if not references:
+        print(paint("No references found.", WARN))
+        return
+
+    for ref in references:
+        print(f" {format_reference(ref)}")
+    print()
+    count = len(references)
+    print(paint(f"{count} reference{'' if count == 1 else 's'}.", LABEL))
+
+
+def format_reference(ref, marker=""):
+    container = paint(ref.get("container") or "<scope unknown>", SYMBOL)
+    kind = paint(f"({ref.get('container_kind') or '<kind unknown>'})", LABEL)
+    where = paint(
+        f"{ref.get('file') or '<file unknown>'}:{ref.get('line') or '<line unknown>'}",
+        LOCATION,
+    )
+    return f"{marker}{container} {kind} {paint('in', LABEL)} {where}"
 
 
 def cmd_diff(args):
     """
-    Show the differences for a symbol in the codebase from one commit to another.
+    Show how a symbol changed between two commits.
 
-    This command allows users to see how a symbol has changed
-    over time, including modifications to its definition and usage.
+    Both commits are indexed on demand, so any point in history can be compared.
     """
-    import requests
-
-    print(f"Showing differences for symbol: {args.symbol}")
-    print(f" From commit: {args.from_commit}")
-    print(f" To commit: {args.to_commit}")
-
-    # Make a request to the Pluk API to get the diff
-    res = requests.get(
-        f"{os.environ.get('PLUK_API_URL')}/diff/{args.symbol}/{args.from_commit}/{args.to_commit}"
+    progress = None if args.json else (lambda message: print(message))
+    differences = query.diff(
+        args.symbol, args.from_commit, args.to_commit, on_progress=progress
     )
-    if res.status_code == 200:
-        res_obj = res.json()["differences"]
-        definition_changed = res_obj.get("definition_changed", False)
-        definition_changed_details = res_obj.get("definition_changed_details", {})
-        from_definition_changed_obj = definition_changed_details.get("from", {})
-        to_definition_changed_obj = definition_changed_details.get("to", {})
-        new_references = res_obj.get("new_references", [])
-        removed_references = res_obj.get("removed_references", [])
 
-        if not definition_changed and not new_references and not removed_references:
-            print(" No changes found.")
-            return
-        print("Differences found:")
-        print(" Definition:")
-        if not definition_changed:
-            print(" No changes")
-        else:
-            # Compare the two definition objects and show differences
-            for key in [
-                "file",
-                "line",
-                "end_line",
-                "name",
-                "kind",
-                "language",
-                "signature",
-                "scope",
-                "scope_kind",
-            ]:
-                from_value = from_definition_changed_obj.get(key)
-                to_value = to_definition_changed_obj.get(key)
-                if from_value != to_value:
-                    print(f" * {key}:")
-                    print(f"     - From: {from_value}")
-                    print(f"     - To:   {to_value}")
-                else:
-                    print(f" * {key}: No change")
+    if emit(args, differences):
+        return
 
-        print()
-        print(" New references:")
-        if not new_references:
-            print(" No new references")
-        else:
-            for ref in new_references:
-                print(
-                    f" * {ref.get('container', '<scope unknown>')} ({ref.get('container_kind', '<kind unknown>')}) in {ref.get('file', '<file unknown>')}:{ref.get('line', '<line unknown>')}"
-                )
-        print()
-        print(" Removed references:")
-        if not removed_references:
-            print(" No removed references")
-        else:
-            for ref in removed_references:
-                print(
-                    f" * {ref.get('container', '<scope unknown>')} ({ref.get('container_kind', '<kind unknown>')}) in {ref.get('file', '<file unknown>')}:{ref.get('line', '<line unknown>')}"
-                )
-        print()
+    print(paint(f"Changes to {args.symbol}", HEADING))
+    print(
+        paint(
+            f" {differences['from_commit'][:12]} -> {differences['to_commit'][:12]}",
+            LABEL,
+        )
+    )
+    print()
 
-    elif res.status_code == 404:
-        print("Symbol not found in one of the commits.")
+    definition_changed = differences["definition_changed"]
+    new_references = differences["new_references"]
+    removed_references = differences["removed_references"]
+
+    if not definition_changed and not new_references and not removed_references:
+        print(paint("No changes found.", WARN))
+        return
+
+    print(paint("Definition", HEADING))
+    if not definition_changed:
+        print(paint(" unchanged", LABEL))
     else:
-        print(f"Error showing differences: {res.status_code}")
+        details = differences["definition_changed_details"]
+        for key in SYMBOL_FIELDS:
+            from_value = details["from"].get(key)
+            to_value = details["to"].get(key)
+            if from_value == to_value:
+                print(paint(f" {key}: unchanged", LABEL))
+            else:
+                print(f" {paint(key, SYMBOL)}:")
+                print(paint(f"   - {from_value}", REMOVED))
+                print(paint(f"   + {to_value}", ADDED))
+
+    print()
+    print(paint("New references", HEADING))
+    if not new_references:
+        print(paint(" none", LABEL))
+    for ref in new_references:
+        print(f" {format_reference(ref, marker=paint('+ ', ADDED))}")
+
+    print()
+    print(paint("Removed references", HEADING))
+    if not removed_references:
+        print(paint(" none", LABEL))
+    for ref in removed_references:
+        print(f" {format_reference(ref, marker=paint('- ', REMOVED))}")
+    print()
+
+
+def add_json_flag(parser):
+    parser.add_argument(
+        "--json", action="store_true", help="Emit machine-readable JSON output"
+    )
 
 
 def build_parser():
@@ -333,28 +226,35 @@ def build_parser():
 
     # Create the main argument parser
     p = argparse.ArgumentParser(prog="pluk", description="Pluk CLI")
+    p.add_argument("--version", action="version", version=f"pluk {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
 
     # === Define subcommands ===
 
-    # Initialize a repository
+    # Index a repository
     p_init = sub.add_parser("init", help="Index a git repo")
-    p_init.add_argument("path", help="Path to the repository")
+    p_init.add_argument("path", nargs="?", default=".", help="Path or URL of the repository")
+    p_init.add_argument("--rev", default="HEAD", help="Commit SHA or git alias to index")
+    p_init.add_argument("--force", action="store_true", help="Reindex even if already indexed")
+    add_json_flag(p_init)
     p_init.set_defaults(func=cmd_init)
 
     # Search for a symbols
     p_search = sub.add_parser("search", help="Search for a symbol")
     p_search.add_argument("symbol", help="Symbol name")
+    add_json_flag(p_search)
     p_search.set_defaults(func=cmd_search)
 
     # Define a symbol
     p_define = sub.add_parser("define", help="Define a symbol")
     p_define.add_argument("symbol", help="Symbol name")
+    add_json_flag(p_define)
     p_define.set_defaults(func=cmd_define)
 
     # Analyze impact of a symbol
     p_impact = sub.add_parser("impact", help="Analyze impact of a symbol")
     p_impact.add_argument("symbol", help="Symbol name")
+    add_json_flag(p_impact)
     p_impact.set_defaults(func=cmd_impact)
 
     # Show differences for a symbol (between commits/aliases)
@@ -362,19 +262,8 @@ def build_parser():
     p_diff.add_argument("symbol", help="Symbol name")
     p_diff.add_argument("from_commit", help="Commit SHA or git alias (e.g. head) to compare from")
     p_diff.add_argument("to_commit", help="Commit SHA or git alias (e.g. main) to compare to")
+    add_json_flag(p_diff)
     p_diff.set_defaults(func=cmd_diff)
-
-    # Start Pluk services
-    p_start = sub.add_parser("start", help="Start Pluk services")
-    p_start.set_defaults(func=cmd_start)
-
-    # Stop Pluk services
-    p_cleanup = sub.add_parser("cleanup", help="Stop Pluk services")
-    p_cleanup.set_defaults(func=cmd_cleanup)
-
-    # Check Pluk services status
-    p_status = sub.add_parser("status", help="Check Pluk services status")
-    p_status.set_defaults(func=cmd_status)
 
     return p
 
@@ -386,7 +275,14 @@ def main():
         sys.exit(1)
 
     args = parser.parse_args()
-    args.func(args)
+    try:
+        args.func(args)
+    except PlukError as error:
+        print(paint(f"[/] {error}", Fore.RED + Style.BRIGHT), file=sys.stderr)
+        hint = getattr(error, "hint", None)
+        if hint:
+            print(paint(f"    {hint}", LABEL), file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

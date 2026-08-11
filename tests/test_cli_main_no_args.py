@@ -1,13 +1,14 @@
 # tests/test_cli_main_no_args.py
 
-import os, sys, pytest
+import sys
 
-os.environ.setdefault("PLUK_REDIS_URL", "redis://localhost:6379/0")
+import pytest
+
 from pluk import cli
 
 
 def test_main_no_args_prints_help_and_exits(monkeypatch, capsys):
-    monkeypatch.setattr(sys, "argv", ["plukd"])
+    monkeypatch.setattr(sys, "argv", ["pluk"])
     with pytest.raises(SystemExit) as e:
         cli.main()
     assert e.value.code == 1

@@ -1,14 +1,14 @@
 # Pluk
 
-Git-commit–aware symbol lookup & impact analysis engine
+Git-aware symbol lookup & impact analysis engine
 
 ---
 
 ## What is a "symbol"?
 
-In Pluk, a **symbol** is any named entity in your codebase that can be referenced, defined, or impacted by changes. This includes functions, classes, methods, variables, and other identifiers that appear in your source code. Pluk tracks symbols across commits and repositories to enable powerful queries like "go to definition", "find all references", and "impact analysis".
+In Pluk, a **symbol** is any named entity in your codebase that can be referenced, defined, or impacted by changes. This includes functions, classes, methods, interfaces, and structs. Pluk tracks symbols across commits to enable queries like "go to definition", "find all references", and "impact analysis".
 
-Pluk gives developers “go-to-definition”, “find-all-references”, and “blast-radius” impact queries across one or more Git repositories. Heavy lifting (indexing, querying, storage) runs in Docker containers; a lightweight host shim (`pluk`) boots the stack and delegates commands into a thin CLI container (`plukd`) that talks to an internal API.
+Pluk gives developers “go-to-definition”, “find-all-references”, and “blast-radius” impact queries over a Git repository. Everything runs locally in a single process. There are no containers, no daemons, no database server, and **nothing ever leaves your machine**.
 
 ---
 
@@ -17,16 +17,17 @@ Pluk gives developers “go-to-definition”, “find-all-references”, and “
 -  **Define**: list metadata about a specific symbol
 -  **Impact**: find references and usage contexts of a symbol
 -  **Diff**: compare definitions and references between commits
--  **Indexing**: via universal-ctags and tree-sitter (one branch at a time)
--  **Containerized**: runs with Docker Compose, no host setup needed
+-  **Indexing**: via tree-sitter, one commit at a time
+-  **Local**: one SQLite file, no services to run
+-  **Scriptable**: `--json` on every command
 -  **Language support:** Python, JavaScript (incl. JSX), TypeScript (incl. TSX), Go, Java, C, C++
 
 ---
 
 ## Prerequisites
-- Docker and Docker Compose
-- Git repositories must be **public or cloneable** from inside the container
-- Supported OS: Linux, macOS, Windows (with Docker Desktop)
+- Python 3.11+
+- Git
+- Supported OS: Linux, macOS, Windows
 
 ---
 ## Installation
@@ -38,39 +39,24 @@ pip install pluk
 ## Usage
 
 ```bash
-pluk start                        # launch services
-pluk status                       # check if services are running
-pluk cleanup                      # stop services
-
-pluk init /path/to/repo           # queue full index of a repository
-pluk search MyClass               # symbol lookup; symbol matches branch-wide
+pluk init [path|url]              # index a repository (defaults to .)
+pluk search MyClass               # symbol lookup; fuzzy, branch-wide
 pluk define my_function           # show symbol definition
 pluk impact computeFoo            # list symbol references with context
 pluk diff symbol <ref1> <ref2>    # compare symbol changes between commits/aliases (e.g. head, main, or SHAs)
 ```
 
-Start the Pluk services:
-
-```powershell
-> pluk start
-Pulling latest Docker images...
-Starting Pluk services...
-[+] Running 5/5
- ✔ Container pluk-redis-1     Healthy                                                                                                                                                                                                                                           7.5s
- ✔ Container pluk-postgres-1  Healthy                                                                                                                                                                                                                                           7.5s
- ✔ Container pluk-api-1       Started                                                                                                                                                                                                                                           7.0s
- ✔ Container pluk-worker-1    Started                                                                                                                                                                                                                                           8.0s
- ✔ Container pluk-cli-1       Started                                                                                                                                                                                                                                           7.4s
-Pluk services are now running.
-
-```
+There are no services to start; `pluk init` is the first and only setup step.
 
 Initialize a repository:
 
 ```powershell
 > pluk init .
-Initializing repository at .
-[+] Repository initialized successfully.
+Indexing https://github.com/jorstors/pluk-diff-sample at dd36847d0f55
+Parsing 3 files across 1 languages
+  python: 12 symbols from 3 files
+
+[+] 12 symbols indexed.
 Current repository:
     URL: https://github.com/jorstors/pluk-diff-sample
     Commit SHA: dd36847d0f55c5af6e70ee920837c782d09edbc2
@@ -81,7 +67,7 @@ Search for a symbol:
 
 ```powershell
 > pluk search find
-Searching for symbol: find @ https://github.com/jorstors/pluk-diff-sample:dd36847d0f55c5af6e70ee920837c782d09edbc2
+Searching for symbol: find @ https://github.com/jorstors/pluk-diff-sample:dd36847d0f55
 
 Found symbol: find_refs
  Located at: src/app.py:1
@@ -91,8 +77,6 @@ Define a symbol:
 
 ```powershell
 > pluk define find_refs
-Defining symbol: find_refs
-
 Symbol: find_refs
  Location: src/app.py:1-3
  Kind: function
@@ -116,8 +100,9 @@ Diff a symbol across commits:
 ```powershell
 > pluk diff find_refs caa599294066de31f01305a781ca8ff0bbe06aba dd36847d0f55c5af6e70ee920837c782d09edbc2
 Showing differences for symbol: find_refs
- From commit: caa599294066de31f01305a781ca8ff0bbe06aba
- To commit: dd36847d0f55c5af6e70ee920837c782d09edbc2
+ From commit: caa599294066
+ To commit: dd36847d0f55
+
 Differences found:
  Definition:
  * file: No change
@@ -139,30 +124,56 @@ Differences found:
  * use (function_definition) in src/app.py:6
 ```
 
-If you want a full teardown (remove containers/network), use:
+`pluk diff` indexes both commits on demand, so any point in history can be compared without indexing it up front.
+
+Every command accepts `--json` for machine-readable output:
 
 ```bash
-docker compose -f ~/.pluk/docker-compose.yml down -v
+pluk search find --json | jq '.symbols[].location'
 ```
 
 ---
 
-## Data Flow
+## How it works
 
-[![](https://mermaid.ink/img/pako:eNp9UtGO2jAQ_BVrHyqQAiKBhCSVKrWg6irRit6dVKmkqkyyl0Qkdmo7BUr4967D0eNe-rT27OzsztonSGWGEMNTJfdpwZVhq_tEMKbbba54U7A7qY0FGHsoynqTQFO1OzYoCGaakGECP2weRZaIV5VLme5Q_fyCZi_V7qKxWH0iibQqmUb1u0wxEQMrmL1leMCUGa5yNFdNxt6vLZ83t_yPXBvCX0jfSB4V8fb94Ya6wArV8YV5j1mpN4M-JGKrpKW_YSlPCxw-c5YfNoM1ucsVPnxdJUIf662sWO9p-Nqq3Qgbjd51_eylMLKzDm2KQp-5e3xcd9aGBSlc6OJXiy2SW73THXse52qkp6RS6Lb-L2WvSoPUNcNDR1PfNlDIM0Y9VIna5sCBXJUZxEa16ECNqub2CidblYApsMYEYjpmnN4KEnGmmoaL71LW1zIl27yA-IlXmm5tk3GDy5LTZup_qKLloFrIVhiIg8j3ehWIT3CAeOSF_tibzqahO43mURDNZw4cIXa9YBzOCJyEfjQJvDA4O_Cn7-yOPd-fBG7ou-48CN25A7QKI9Xny7_tv-_5L0GP5fk?type=png)](https://mermaid.live/edit#pako:eNp9UtGO2jAQ_BVrHyqQAiKBhCSVKrWg6irRit6dVKmkqkyyl0Qkdmo7BUr4967D0eNe-rT27OzsztonSGWGEMNTJfdpwZVhq_tEMKbbba54U7A7qY0FGHsoynqTQFO1OzYoCGaakGECP2weRZaIV5VLme5Q_fyCZi_V7qKxWH0iibQqmUb1u0wxEQMrmL1leMCUGa5yNFdNxt6vLZ83t_yPXBvCX0jfSB4V8fb94Ya6wArV8YV5j1mpN4M-JGKrpKW_YSlPCxw-c5YfNoM1ucsVPnxdJUIf662sWO9p-Nqq3Qgbjd51_eylMLKzDm2KQp-5e3xcd9aGBSlc6OJXiy2SW73THXse52qkp6RS6Lb-L2WvSoPUNcNDR1PfNlDIM0Y9VIna5sCBXJUZxEa16ECNqub2CidblYApsMYEYjpmnN4KEnGmmoaL71LW1zIl27yA-IlXmm5tk3GDy5LTZup_qKLloFrIVhiIg8j3ehWIT3CAeOSF_tibzqahO43mURDNZw4cIXa9YBzOCJyEfjQJvDA4O_Cn7-yOPd-fBG7ou-48CN25A7QKI9Xny7_tv-_5L0GP5fk)
+```mermaid
+flowchart LR
+    CLI["pluk"] --> REPO[("your git repo")]
+    REPO --> DB[("~/.pluk/pluk.db")]
+```
 
-**How it works**
+- **`pluk init`** reads the repo where it sits; nothing is copied. Passing a URL instead mirrors it under `~/.pluk/repos` first.
+- **tree-sitter** extracts both definitions and references from the files tracked at a commit.
+- **SQLite** stores the symbol graph in a single file.
+- **`search`** and **`define`** are pure SQL, so they return immediately. **`impact`** additionally re-parses the files that mention the symbol, since call sites are found in the AST rather than stored.
+- **`diff`** indexes both commits, then compares their definitions and reference sets.
 
-- **Host shim (`pluk`)** writes the Compose file, **pulls images**, and runs `docker compose up`.
-- **CLI container (`plukd`)** is the exec target; it calls the API at `http://api:8000`.
-- **API (FastAPI)** serves read endpoints (`/search`, `/define`, `/impact`, `/diff`) and enqueues write jobs (`/reindex`) to **Redis**.
-- **Worker (Celery)** consumes jobs from **Redis**, clones/pulls repos into a volume (`/var/pluk/repos`), parses it, and writes to **Postgres**.
+Everything lives under `~/.pluk` (override with `PLUK_HOME`):
+
+- `pluk.db`: the entire index. Delete it to start over.
+- `repos/`: mirrors of repositories indexed by URL only.
+
+Parsing is syntactic, so references resolve by name; dynamic dispatch and reflection will not be found. Files outside the supported languages are skipped.
+
+---
+
+## Development
+
+**Project layout** (`src/pluk`):
+
+- `cli.py`: argument parsing and output
+- `query.py`: read queries (`define`, `search`, `impact`, `diff`)
+- `indexer.py`: git plumbing and index writes
+- `refs_ts.py`: tree-sitter definition and reference extraction
+- `db.py`: SQLite connection and schema
+- `SQL_UTIL/operations.py`: schema and queries
 
 ---
 
 ## Testing
 
 ```bash
+pip install -e ".[test]"
 pytest
 ```
 ---
