@@ -1,4 +1,11 @@
 # src/pluk/SQL_UTIL/operations.py
+"""
+The SQLite schema and every query the rest of Pluk runs against it.
+
+Kept as plain strings rather than an ORM so `db.py` and `query.py` can stay
+thin wrappers; this is the one place schema and SQL changes need to happen.
+"""
+
 import textwrap
 
 SCHEMA = textwrap.dedent("""

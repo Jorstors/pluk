@@ -27,10 +27,12 @@ from pluk.refs_ts import (
 
 
 def repos_dir() -> Path:
+    """Where mirrors of URL-indexed repos are cloned, under PLUK_HOME/repos."""
     return pluk_home() / "repos"
 
 
 def git(repo, *args, quiet=False, **kwargs):
+    """Run a git command in `repo` and return its trimmed stdout."""
     return subprocess.check_output(
         ["git", "-C", str(repo), *args],
         text=True,
@@ -40,6 +42,7 @@ def git(repo, *args, quiet=False, **kwargs):
 
 
 def is_git_repo(path) -> bool:
+    """Whether `path` is (inside) a git working tree."""
     try:
         git(path, "rev-parse", "--git-dir", quiet=True)
         return True
@@ -48,10 +51,12 @@ def is_git_repo(path) -> bool:
 
 
 def looks_like_url(target: str) -> bool:
+    """Whether `target` names a remote repo rather than a local path."""
     return target.startswith(("http://", "https://", "git@", "ssh://", "git://"))
 
 
 def origin_url(repo):
+    """The `origin` remote URL for `repo`, or None if it has no remote."""
     try:
         return git(repo, "remote", "get-url", "origin", quiet=True)
     except subprocess.CalledProcessError:
@@ -59,6 +64,7 @@ def origin_url(repo):
 
 
 def resolve_commit(repo, rev):
+    """Resolve a git revision (SHA, branch, alias) to a full commit SHA."""
     try:
         return git(repo, "rev-parse", rev, quiet=True)
     except subprocess.CalledProcessError:

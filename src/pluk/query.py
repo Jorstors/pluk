@@ -35,6 +35,7 @@ class PlukError(Exception):
 
 
 def current_repo(conn):
+    """The repo/commit `pluk init` last registered, or raise if none yet."""
     repo_url, commit_sha, repo_path = get_repo_info(conn)
     if not repo_url or not commit_sha:
         raise PlukError(
@@ -45,6 +46,7 @@ def current_repo(conn):
 
 
 def define(symbol: str, commit_sha: str = None):
+    """Look up one symbol's definition by exact name, defaulting to the current commit."""
     conn = connect()
     try:
         repo_url, current_sha, _ = current_repo(conn)
@@ -61,6 +63,7 @@ def define(symbol: str, commit_sha: str = None):
 
 
 def search(symbol: str):
+    """Fuzzy-match symbol names against the current commit's index."""
     conn = connect()
     try:
         repo_url, commit_sha, _ = current_repo(conn)
@@ -85,6 +88,13 @@ def search(symbol: str):
 
 
 def impact(symbol: str, commit_sha: str = None):
+    """
+    Find every reference to `symbol`, with the container it appears in.
+
+    The symbol's definition is looked up first (from the index, pure SQL) to
+    learn its language; the files that mention it by name are then re-parsed
+    with tree-sitter, since call sites are not stored, only definitions are.
+    """
     conn = connect()
     try:
         repo_url, current_sha, repo_path = current_repo(conn)

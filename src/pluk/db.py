@@ -23,10 +23,12 @@ SCHEMA_VERSION = 1
 
 
 def pluk_home() -> Path:
+    """Root directory for all Pluk state, PLUK_HOME if set else ~/.pluk."""
     return Path(os.environ.get("PLUK_HOME") or (Path.home() / ".pluk"))
 
 
 def db_path() -> Path:
+    """Path to the single SQLite file backing the index."""
     return pluk_home() / "pluk.db"
 
 
@@ -66,11 +68,13 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
 
 
 def get_state(conn: sqlite3.Connection, key: str):
+    """Read one value from the key/value `state` table, or None if unset."""
     row = conn.execute(read_state, {"key": key}).fetchone()
     return row["value"] if row else None
 
 
 def set_state(conn: sqlite3.Connection, key: str, value: str) -> None:
+    """Upsert one value into the key/value `state` table."""
     conn.execute(write_state, {"key": key, "value": value})
 
 

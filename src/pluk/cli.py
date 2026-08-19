@@ -1,4 +1,11 @@
 # src/pluk/cli.py
+"""
+Command-line entry point: argument parsing plus human-readable formatting.
+
+Every command function (`cmd_*`) calls into `query`/`indexer` for the actual
+work, then either prints JSON (`--json`) or renders colorized text. Business
+logic and errors (`PlukError`) live in `query.py`/`indexer.py`, not here.
+"""
 
 import argparse
 import json
@@ -27,6 +34,7 @@ ADDED = Fore.GREEN
 
 
 def paint(text, style):
+    """Wrap `text` in a colorama style, resetting after it."""
     return f"{style}{text}{Style.RESET_ALL}"
 
 
@@ -138,6 +146,7 @@ def cmd_impact(args):
 
 
 def format_reference(ref, marker=""):
+    """Render one reference dict as `<container> (<kind>) in <file>:<line>`."""
     container = paint(ref.get("container") or "<scope unknown>", SYMBOL)
     kind = paint(f"({ref.get('container_kind') or '<kind unknown>'})", LABEL)
     where = paint(
@@ -210,6 +219,7 @@ def cmd_diff(args):
 
 
 def add_json_flag(parser):
+    """Add the shared `--json` flag to a subcommand parser."""
     parser.add_argument(
         "--json", action="store_true", help="Emit machine-readable JSON output"
     )
@@ -269,6 +279,7 @@ def build_parser():
 
 
 def main():
+    """CLI entry point: parse args, dispatch to the matching `cmd_*`, and turn a PlukError into a clean exit."""
     parser = build_parser()
     if len(sys.argv) == 1:
         parser.print_help()

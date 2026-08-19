@@ -151,8 +151,13 @@ def language_for_path(path):
     return EXTENSIONS.get(os.path.splitext(path)[1].lower())
 
 
-# Preliminary search for files containing the symbol
 def git_grep_files(repo, commit, name):
+    """
+    Files at `commit` containing `name` as a whole word.
+
+    A cheap pre-filter before the expensive step: parsing every candidate
+    file with tree-sitter to confirm real references (see `find_refs`).
+    """
     try:
         out = subprocess.check_output(
             ["git", "-C", repo, "grep", "-lIw", "--", name, commit], text=True
@@ -162,21 +167,21 @@ def git_grep_files(repo, commit, name):
     return [ln.split(":", 1)[-1] for ln in out.splitlines()]
 
 
-# List every file tracked at a commit
 def git_list_files(repo, commit):
+    """Every file path tracked at `commit`, regardless of language."""
     out = subprocess.check_output(
         ["git", "-C", repo, "ls-tree", "-r", "--name-only", commit], text=True
     )
     return out.splitlines()
 
 
-# Show the contents of a file at a specific commit in bytes
 def extract_file_from_commit(repo, commit, path):
+    """Raw bytes of `path` as it existed at `commit`, via `git show`."""
     return subprocess.check_output(["git", "-C", repo, "show", f"{commit}:{path}"])
 
 
-# Find the nearest container (function/class) for a given node
 def locate_parent_container(lang_key, node):
+    """Walk up from `node` to the nearest enclosing function/class/method, or None at top level."""
     containers = CONTAINERS[lang_key]
     cur = node
     while cur:
@@ -187,6 +192,7 @@ def locate_parent_container(lang_key, node):
 
 
 def node_text(src, node):
+    """The source slice a tree-sitter node spans, decoded as UTF-8, or None."""
     if node is None:
         return None
     return src[node.start_byte : node.end_byte].decode("utf-8", "replace")
@@ -241,8 +247,8 @@ QUERY = {}
 DEF_QUERY = {}
 
 
-# Cache builds for reuse
 def ensure_lang_ready(lang_key):
+    """Build and cache the parser/queries for `lang_key` on first use."""
     if lang_key in LANG:
         return
     lang = get_language(lang_key)
@@ -304,8 +310,14 @@ def find_defs(repo, commit, lang_key, files):
     return definitions
 
 
-# Find references to a symbol in a set of files
 def find_refs(repo, commit, name, lang_key, files):
+    """
+    Confirm and locate real call sites of `name` within `files` at `commit`.
+
+    `files` is expected to already be grep-narrowed (see `git_grep_files`);
+    this does the precise part grep can't, since matching call nodes rather
+    than raw text avoids counting the symbol's own definition or a comment.
+    """
     ensure_lang_ready(lang_key)
     parser = PARSER[lang_key]
     query = QUERY[lang_key]
