@@ -350,3 +350,85 @@ def find_refs(repo, commit, name, lang_key, files):
             )
 
     return references_list
+
+
+def last_change(repo, name, path):
+    """
+    The most recent commit that added or removed `name` in `path`.
+
+    The --format keeps it to one line of `sha subject`. Pickaxe search, so a
+    symbol whose occurrence count never changed (e.g. born in the file's first
+    commit alongside the file) has no history and yields None.
+    """
+    try:
+        out = subprocess.check_output(
+            ["git", "-C", repo, "log", "-1", "--format=%h %s", "-S", name, "--", path],
+            text=True,
+        ).strip()
+    except subprocess.CalledProcessError:
+        return None
+    if not out:
+        return None
+    commit, _, subject = out.partition(" ")
+    return {"commit": commit, "subject": subject}
+
+
+def symbol_docstring(lang_key, src, name, line):
+    """
+    The leading docstring/docblock of the definition at `line`, or None.
+
+    Python's docstring is a string statement opening the body; in every other
+    language it is a comment block ending on the line directly above the
+    definition. Comments are "extra" tokens in tree-sitter, so they live in the
+    tree even though the definition queries never capture them.
+    """
+    ensure_lang_ready(lang_key)
+    tree = PARSER[lang_key].parse(src)
+    cursor = ts.QueryCursor(DEF_QUERY[lang_key])
+    for node in cursor.captures(tree.root_node).get("def", []):
+        if node.start_point[0] + 1 != line:
+            continue
+        name_node = definition_name_node(node)
+        if name_node is None or node_text(src, name_node) != name:
+            continue
+        if lang_key == "python":
+            return _python_docstring(src, node)
+        return _comment_docblock(src, tree.root_node, node)
+    return None
+
+
+def _python_docstring(src, node):
+    """The string statement that opens a Python definition's body, or None."""
+    body = node.child_by_field_name("body")
+    if body is None or not body.named_children:
+        return None
+    stmt = body.named_children[0]
+    if stmt.type != "expression_statement":
+        return None
+    for child in stmt.named_children:
+        if child.type == "string":
+            return node_text(src, child)
+    return None
+
+
+def _comment_docblock(src, root, node):
+    """The comment ending on the line just above `node`, or None."""
+    for comment in _walk_comments(root):
+        if comment.end_point[0] + 1 == node.start_point[0]:
+            return node_text(src, comment)
+    return None
+
+
+COMMENT_TYPES = {"comment", "line_comment", "block_comment"}
+
+
+def _walk_comments(root):
+    """Every comment node in the tree, in document order."""
+    found = []
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        if node.type in COMMENT_TYPES:
+            found.append(node)
+        stack.extend(reversed(node.children))
+    return found

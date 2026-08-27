@@ -82,7 +82,7 @@ commit_is_indexed = (
 )
 
 # SQL query for fuzzy matching of symbol names within a specific commit.
-# SQLite's LIKE is case-insensitive for ASCII, so it stands in for Postgres ILIKE.
+# SQLite's LIKE is case-insensitive for ASCII
 find_symbols_fuzzy_match = textwrap.dedent("""
 SELECT file, line, end_line, name, kind, language, signature, scope, scope_kind
 FROM symbols

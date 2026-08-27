@@ -100,8 +100,8 @@ def cmd_search(args):
 
 
 def cmd_define(args):
-    """Show a symbol's definition and its location in the current repository."""
-    symbol = query.define(args.symbol)
+    """Show a symbol's definition plus callers, docstring, and last change."""
+    symbol = query.describe(args.symbol)
 
     if emit(args, symbol):
         return
@@ -116,6 +116,36 @@ def cmd_define(args):
     print(field("Kind", paint(symbol["kind"] or "unknown", KIND)))
     print(field("Language", symbol["language"] or "unknown"))
     print(field("Scope", f"{scope} {scope_kind}"))
+
+    refs = symbol["reference_count"]
+    ref_files = symbol["referenced_in_files"]
+    plural = "" if ref_files == 1 else "s"
+    ref_color = GOOD if refs == 0 else (WARN if refs >= 10 else SYMBOL)
+    print(
+        field(
+            "Callers",
+            paint(f"{refs} ({ref_files} file{plural})", ref_color),
+        )
+    )
+
+    docstring = symbol["docstring"]
+    if docstring:
+        print(field("Docstring", paint(docstring.splitlines()[0][:80], GOOD)))
+    else:
+        print(field("Docstring", paint("none", LABEL)))
+
+    last = symbol["last_change"]
+    if last:
+        print(field("Last change", paint(f"{last['commit']} {last['subject']}", LOCATION)))
+    else:
+        print(field("Last change", paint("never (in current file)", LABEL)))
+
+    source = symbol["source"]
+    if source:
+        print()
+        print(paint("Source:", HEADING))
+        for i, text in enumerate(source, start=symbol["line"]):
+            print(f" {paint(f'{i:>4} | ', LABEL)}{text}")
     print()
 
 

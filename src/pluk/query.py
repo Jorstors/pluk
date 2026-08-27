@@ -6,12 +6,21 @@ These return plain Python data and raise PlukError on failure; formatting and
 exit codes are the CLI's job.
 """
 
+import subprocess
+
 from pluk.db import connect, get_repo_info
 from pluk.SQL_UTIL.operations import (
     find_symbols_fuzzy_match,
     find_exact_symbol,
 )
-from pluk.refs_ts import LANGUAGES, git_grep_files, find_refs
+from pluk.refs_ts import (
+    LANGUAGES,
+    git_grep_files,
+    find_refs,
+    extract_file_from_commit,
+    last_change,
+    symbol_docstring,
+)
 
 SYMBOL_FIELDS = [
     "file",
@@ -60,6 +69,66 @@ def define(symbol: str, commit_sha: str = None):
         return dict(row)
     finally:
         conn.close()
+
+
+def _slice_source(src, line, end_line):
+    """The source lines of a definition's span, 1-based inclusive."""
+    lines = src.decode("utf-8", "replace").splitlines()
+    if end_line is None:
+        return lines[line - 1 : line]
+    return lines[line - 1 : end_line]
+
+
+def describe(symbol: str, commit_sha: str = None):
+    """
+    A symbol's definition plus the context that makes it useful.
+
+    Everything `define` returns, enriched with the definition's source lines,
+    its leading docstring (if any), how many call sites reference it, and the
+    last commit that changed it. `define` stays lean because `diff` leans on it
+    twice per comparison and needs none of this.
+    """
+    conn = connect()
+    try:
+        repo_url, current_sha, repo_path = current_repo(conn)
+        commit_sha = commit_sha or current_sha
+        row = conn.execute(
+            find_exact_symbol,
+            {"repo_url": repo_url, "commit_sha": commit_sha, "name": symbol},
+        ).fetchone()
+        if row is None:
+            raise PlukError(f"Symbol '{symbol}' not found.")
+    finally:
+        conn.close()
+
+    definition = dict(row)
+
+    try:
+        src = extract_file_from_commit(repo_path, commit_sha, definition["file"])
+    except (subprocess.CalledProcessError, OSError):
+        src = None
+
+    if src is None:
+        definition["source"] = []
+        definition["docstring"] = None
+    else:
+        definition["source"] = _slice_source(
+            src, definition["line"], definition["end_line"]
+        )
+        lang_key = LANGUAGES.get(definition["language"])
+        definition["docstring"] = (
+            symbol_docstring(lang_key, src, definition["name"], definition["line"])
+            if lang_key
+            else None
+        )
+
+    refs = impact(symbol, commit_sha)
+    definition["reference_count"] = len(refs)
+    definition["referenced_in_files"] = len({ref["file"] for ref in refs})
+    definition["last_change"] = last_change(
+        str(repo_path), symbol, definition["file"]
+    )
+    return definition
 
 
 def search(symbol: str):

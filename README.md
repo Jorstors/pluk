@@ -14,7 +14,7 @@ Pluk gives developers “go-to-definition”, “find-all-references”, and “
 
 ## Features
 -  **Search**: classes, functions, and other symbols in your repo
--  **Define**: list metadata about a specific symbol
+-  **Define**: metadata, source preview, docstring and callers for a symbol
 -  **Impact**: find references and usage contexts of a symbol
 -  **Diff**: compare definitions and references between commits
 -  **Indexing**: via tree-sitter, one commit at a time
@@ -51,77 +51,93 @@ There are no services to start; `pluk init` is the first and only setup step.
 Initialize a repository:
 
 ```powershell
-> pluk init .
-Indexing https://github.com/jorstors/pluk-diff-sample at dd36847d0f55
-Parsing 3 files across 1 languages
-  python: 12 symbols from 3 files
+> pluk init
+Indexing https://github.com/jorstors/pluk at 8ba49f32f594
+Parsing 15 files across 1 languages
+  python: 67 symbols from 15 files
 
-[+] 12 symbols indexed.
+[+] 67 symbols indexed.
 Current repository:
-    URL: https://github.com/jorstors/pluk-diff-sample
-    Commit SHA: dd36847d0f55c5af6e70ee920837c782d09edbc2
+ URL:        https://github.com/jorstors/pluk
+ Commit:     8ba49f32f59496d6419fdcafbf445e095be30c8d
 
 ```
 
 Search for a symbol:
 
 ```powershell
-> pluk search find
-Searching for symbol: find @ https://github.com/jorstors/pluk-diff-sample:dd36847d0f55
+> pluk search definition
+Searching for definition  @ https://github.com/jorstors/pluk:8ba49f32f594
 
-Found symbol: find_refs
- Located at: src/app.py:1
+definition_name_node  src/pluk/refs_ts.py:201
+definition_params_node  src/pluk/refs_ts.py:226
+
+2 matches.
 ```
 
 Define a symbol:
 
 ```powershell
-> pluk define find_refs
-Symbol: find_refs
- Location: src/app.py:1-3
- Kind: function
- Language: Python
- Signature: (x)
- Scope: global (unknown)
+> pluk define PlukError
+PlukError
+ Location:  src/pluk/query.py:29-34
+ Kind:      class
+ Language:  Python
+ Scope:     global (unknown)
+ Callers:   6 (2 files)
+ Docstring: none
+ Last change: 99b6f65 feat: Update code to use SQLite and run indexing through a single file rather than a docker volume
+
+Source:
+   29 | class PlukError(Exception):
+   30 |     """Anything the user can act on. The CLI prints it and exits non-zero."""
+   31 | 
+   32 |     def __init__(self, message, hint=None):
+   33 |         super().__init__(message)
+   34 |         self.hint = hint
 ```
 
 Check symbol impact:
 
 ```powershell
-> pluk impact find_refs
-Analyzing impact of symbol: find_refs
+> pluk impact PlukError
+Impact of PlukError
 
-References found:
- other (function_definition) in src/app.py:13
+ resolve_commit (function_definition) in src/pluk/indexer.py:71
+ resolve_target (function_definition) in src/pluk/indexer.py:101
+ impact (function_definition) in src/pluk/query.py:108
+ current_repo (function_definition) in src/pluk/query.py:41
+ define (function_definition) in src/pluk/query.py:59
+ impact (function_definition) in src/pluk/query.py:112
+
+6 references.
 ```
 
 Diff a symbol across commits:
 
 ```powershell
 > pluk diff find_refs caa599294066de31f01305a781ca8ff0bbe06aba dd36847d0f55c5af6e70ee920837c782d09edbc2
-Showing differences for symbol: find_refs
- From commit: caa599294066
- To commit: dd36847d0f55
+Changes to find_refs
+ caa599294066 -> dd36847d0f55
 
-Differences found:
- Definition:
- * file: No change
- * line: No change
- * end_line:
-     - From: 2
-     - To:   3
- * name: No change
- * kind: No change
- * language: No change
- * signature: No change
- * scope: No change
- * scope_kind: No change
+Definition
+ file: unchanged
+ line: unchanged
+ end_line:
+   - 2
+   + 3
+ name: unchanged
+ kind: unchanged
+ language: unchanged
+ signature: unchanged
+ scope: unchanged
+ scope_kind: unchanged
 
- New references:
- * other (function_definition) in src/app.py:13
+New references
+ + other (function_definition) in src/app.py:13
 
- Removed references:
- * use (function_definition) in src/app.py:6
+Removed references
+ - use (function_definition) in src/app.py:6
 ```
 
 `pluk diff` indexes both commits on demand, so any point in history can be compared without indexing it up front.
@@ -145,7 +161,7 @@ flowchart LR
 - **`pluk init`** reads the repo where it sits; nothing is copied. Passing a URL instead mirrors it under `~/.pluk/repos` first.
 - **tree-sitter** extracts both definitions and references from the files tracked at a commit.
 - **SQLite** stores the symbol graph in a single file.
-- **`search`** and **`define`** are pure SQL, so they return immediately. **`impact`** additionally re-parses the files that mention the symbol, since call sites are found in the AST rather than stored.
+- **`search`** is pure SQL and returns immediately. **`define`** also reads the file back from git history for a source preview and docstring, then reports the symbol's callers and last change. **`impact`** re-parses the files that mention the symbol, since call sites are found in the AST rather than stored.
 - **`diff`** indexes both commits, then compares their definitions and reference sets.
 
 Everything lives under `~/.pluk` (override with `PLUK_HOME`):

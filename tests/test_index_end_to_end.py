@@ -6,8 +6,9 @@ import subprocess
 import pytest
 
 SOURCE = {
-    "svc.py": "class Widget:\n    def render(self, x):\n        return helper(x)\n\n\ndef helper(x):\n    return x\n",
+    "svc.py": "class Widget:\n    def render(self, x):\n        return helper(x)\n\n\ndef helper(x):\n    \"\"\"Returns x as-is.\"\"\"\n    return x\n",
     "lib.go": "package main\n\nfunc double(n int) int { return n * 2 }\n\nfunc Run(n int) int { return double(n) }\n",
+    "app.js": "// floor helper\nfunction floor(n) { return n; }\nfunction use() { return floor(1) + floor(2); }\n",
 }
 
 
@@ -73,3 +74,27 @@ def test_unknown_symbol_raises(indexed):
 
     with pytest.raises(PlukError):
         query.define("no_such_symbol")
+
+
+def test_describe_surfaces_source_and_docstring(indexed):
+    from pluk import query
+
+    d = query.describe("helper")
+    assert d["source"][0] == "def helper(x):"
+    assert "Returns x as-is" in d["docstring"]
+
+
+def test_describe_counts_callers_and_last_change(indexed):
+    from pluk import query
+
+    d = query.describe("helper")
+    assert d["reference_count"] == 1
+    assert d["referenced_in_files"] == 1
+    assert d["last_change"]["commit"]
+
+
+def test_describe_finds_comment_docblock(indexed):
+    from pluk import query
+
+    d = query.describe("floor")
+    assert "floor helper" in d["docstring"]
